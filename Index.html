@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>店舗日報</title>
+<style>
+:root{--ink:#173b35;--green:#176655;--bg:#f3f5f1;--line:#dce4dc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px system-ui,sans-serif}header{background:var(--ink);color:white;padding:28px max(24px,calc((100% - 740px)/2));}header small{letter-spacing:.18em;color:#bad5c8}h1{font-size:28px;margin:7px 0}header p{margin:0;color:#d4e2d9;font-size:14px}nav{position:sticky;top:0;z-index:2;background:white;display:flex;border-bottom:1px solid var(--line);padding:8px max(12px,calc((100% - 764px)/2));gap:4px}button{font:inherit;cursor:pointer;border:1px solid var(--line);background:white;color:var(--ink);border-radius:10px;min-height:52px;padding:10px 16px}nav button{flex:1;white-space:nowrap;border:0;font-size:16px}nav button.active{background:#e2eee6;color:var(--green);font-weight:bold}main{max-width:788px;margin:auto;padding:24px 24px 140px}.card{background:white;border:1px solid var(--line);border-radius:18px;padding:24px;margin:20px 0}h2{font-size:22px;margin:0 0 8px}h3{font-size:17px;margin:24px 0 12px}.hint{font-size:14px;color:#627970;line-height:1.7}label{display:block;font-size:15px;margin:16px 0 8px}input,select,textarea{font:inherit;width:100%;min-height:56px;border:1px solid #c5d3ca;border-radius:10px;background:#fff;padding:12px;color:var(--ink)}input:focus,select:focus,textarea:focus{outline:3px solid #aad4bc}.row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(110px,1fr) 50px;gap:10px;margin:12px 0}.row button{padding:4px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}.add{width:100%;border:1px dashed #85ab98;color:var(--green)}.total{background:#edf4ed;padding:18px;border-radius:12px;display:flex;justify-content:space-between;margin-top:20px}.total strong{font-size:24px}footer{position:fixed;bottom:0;width:100%;background:#ffffffed;border-top:1px solid var(--line);padding:14px 24px calc(14px + env(safe-area-inset-bottom));z-index:3}.foot{max-width:740px;margin:auto;display:flex;align-items:center;gap:20px}.foot button{margin-left:auto;background:var(--green);color:white;border:0;min-width:180px}#status{font-size:16px;white-space:pre-line;line-height:1.6;overflow-wrap:anywhere;flex:1;min-width:0}#status[data-kind="error"],#status[data-kind="warning"]{color:#a41420;background:#fff0f1;border:2px solid #cb3342;border-radius:10px;padding:12px 16px;font-weight:700}#status[data-kind="success"]{color:#176044;font-weight:700}.foot:has(#status[data-kind="error"]),.foot:has(#status[data-kind="warning"]){flex-wrap:wrap}.foot #status[data-kind="error"],.foot #status[data-kind="warning"]{flex-basis:100%;max-height:25vh;overflow:auto}#mode{color:#92311b;font-weight:700;border-bottom:2px solid #ba5b28}button:disabled{opacity:.5;cursor:wait}.record{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:12px 0;gap:10px}.record span{overflow-wrap:anywhere}#mode{background:#fff0cb;padding:12px 24px;font-size:14px}section[hidden]{display:none}@media(max-width:500px){main{padding:12px 12px 140px}.card{padding:16px}nav button{font-size:13px;padding:10px 5px}.row{gap:6px;grid-template-columns:minmax(0,1.3fr) minmax(90px,1fr) 44px}.pair{gap:12px}.foot button{min-width:130px}}
+.petty-item{border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}.petty-heading{display:flex;justify-content:space-between;align-items:center}.petty-heading strong{font-size:16px}.calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:16px}.calendar span{text-align:center;font-size:14px;padding:8px}.calendar .in-period{background:#e2eee6;color:var(--green);font-weight:700;border-radius:8px}.calendar-navigation:not([hidden]){display:flex;justify-content:space-between;align-items:center;margin-top:16px}.calendar-navigation button{min-width:48px;padding:6px}.line-option{display:flex;align-items:center;gap:12px;min-height:48px;cursor:pointer}.line-option input{width:24px;height:24px;min-height:0;margin:0;accent-color:var(--green)}.record-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.delete-detail{color:#a41420}dialog{border:1px solid var(--line);border-radius:16px;padding:24px;max-width:min(480px,90vw);color:var(--ink)}dialog::backdrop{background:#0006}.reservation-grid{max-width:28rem}.reservation-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(2,minmax(2.5rem,4rem)) 36px;gap:6px;align-items:center;margin:4px 0;font-size:.875rem}.reservation-row input{width:100%;min-height:36px;padding:4px 6px;box-sizing:border-box;text-align:right}.reservation-row label{margin:0}.reservation-row select,.reservation-row button{min-width:0;min-height:36px;padding:4px}.reservation-row select{font-size:inherit}.save-actions{display:flex;align-items:center;gap:12px;margin-left:auto;max-width:100%}.save-actions .line-option{margin:0;white-space:nowrap}.save-actions .line-option[hidden]{display:none}.save-actions .line-option input{flex:none}@media(max-width:500px){.foot{flex-wrap:wrap;gap:8px}.save-actions{gap:8px}.save-actions .line-option{font-size:14px}}</style></head><body>
+<header><small>DAILY RESTAURANT REPORT</small><h1>店舗日報</h1><p>今日の記録を、ひとつずつ。</p></header>
+<div id="mode" hidden>画面プレビュー：記録はこのブラウザ内に保存されます。Googleドライブには送信されません。</div>
+<nav aria-label="入力タブ"></nav><main><datalist id="reporterSuggestions"><option value="高杉"></option><option value="荒川"></option></datalist><label id="dateLabel" for="date">売上日</label><input type="date" id="date"><p class="hint">日付とタブごとに入力途中の内容を保持します。</p>
+<section id="売上"><div class="card"><h2>売上を記録</h2><label for="reporter">報告者（必須）</label><input id="reporter" list="reporterSuggestions" maxlength="100" autocomplete="off"><div class="pair"><div><label for="groups">総組数（組）</label><input id="groups" type="number" min="0" step="1" inputmode="numeric"></div><div><label for="guests">人数（人）</label><input id="guests" type="number" min="0" step="1" inputmode="numeric"></div></div><h3>当日の予約・ウォークイン</h3><div class="reservation-grid"><div class="reservation-row"><span>媒体</span><span>組数</span><span>人数</span></div><div id="reservationRows"></div><button type="button" id="addReservation" class="add" onclick="addReservationRow();capture()">＋ 媒体を追加</button></div>
+<h3>決済方法別売上</h3><div id="payments"></div><button class="add" onclick="addPayment()">＋ 決済方法を追加</button><p class="hint">売上・消費税・組数・人数・人件費の空欄は0として保存します。</p><label for="tax">消費税（円）</label><input id="tax" type="number" min="0" step="1" inputmode="numeric"><div class="total"><span>総売上</span><strong id="gross">¥0</strong></div></div><div class="card"><h2>人件費</h2><label for="labor">アルバイト人件費（円）</label><input id="labor" type="number" min="0" step="1" inputmode="numeric"></div><div class="card"><h2>所感</h2><label for="impression">営業の振り返り・申し送り</label><textarea id="impression" rows="4" maxlength="500" placeholder="本日の状況など（任意）"></textarea></div></section>
+<section id="仕入" hidden><div class="card"><h2>仕入れを記録</h2><p class="hint">1回の保存で、複数の仕入先を登録できます。</p><h3>食材仕入</h3><div id="food"></div><button class="add" onclick="addItem('食材')">＋ 食材の仕入先を追加</button><h3>飲料仕入</h3><div id="drink"></div><button class="add" onclick="addItem('飲料')">＋ 飲料の仕入先を追加</button><div class="total"><span>今回の仕入合計</span><strong id="purchaseTotal">¥0</strong></div><p class="hint">小口食材・小口酒は「小口その他」から自動反映します。</p><div id="pettyTotals" class="hint"></div></div><div class="card"><h2>この日の登録済み明細</h2><div id="purchaseRecords"></div><button onclick="newEntry()">＋ 新しい明細</button></div></section>
+<section id="小口" hidden><div class="card"><h2>小口その他を記録</h2><p class="hint">＋ボタンで明細を追加し、まとめて保存できます。同じ日・同じ店名も別明細として登録できます。</p><datalist id="vendorSuggestions"></datalist><div id="pettyItems"></div><button class="add" onclick="addPetty()">＋ 小口明細を追加</button><div class="total"><span>今回の小口合計</span><strong id="pettyTotal">¥0</strong></div></div><div class="card"><h2>この日の登録済み明細</h2><div id="pettyRecords"></div><button onclick="newEntry()">＋ 新しい明細</button></div></section>
+<section id="入金" hidden><div class="card"><h2>対象期間</h2><div id="depositStartGroup" hidden><label for="depositStart">計算開始日</label><input id="depositStart" type="date"></div><p id="depositPeriod" class="hint" role="status"></p><button id="depositRetry" hidden onclick="refreshDeposit()">再計算</button><div id="calendarNavigation" class="calendar-navigation" hidden><button id="calendarPrevious" onclick="moveCalendar(-1)" aria-label="前月">‹</button><strong id="calendarMonth" aria-live="polite"></strong><button id="calendarNext" onclick="moveCalendar(1)" aria-label="翌月">›</button></div><div id="depositCalendar" class="calendar"></div><p id="depositWarning" class="hint" role="status"></p></div><div class="card"><h2>入金額・報告</h2><div class="total"><span>入金予定額（表示のみ）</span><strong id="depositExpected">—</strong></div><label for="deposit">実入金額（円）</label><input id="deposit" type="number" min="0" step="1" inputmode="numeric"><div class="total"><span>差異（実入金額 − 予定額）</span><strong id="depositDifference">—</strong></div><label for="depositReporter">報告者（必須）</label><input id="depositReporter" list="reporterSuggestions" maxlength="100" autocomplete="off"><label id="depositNoteLabel" for="depositNote">備考</label><textarea id="depositNote" rows="3" maxlength="500"></textarea></div></section>
+</main><footer><div class="foot"><span id="status" role="status" aria-live="polite">読み込み中…</span><div class="save-actions"><label class="line-option" hidden><input id="salesSendLine" type="checkbox" checked>LINEに投稿する</label><label class="line-option" hidden><input id="depositSendLine" type="checkbox" checked>LINEに投稿する</label><button id="save" onclick="save()">売上を保存</button></div></div></footer>
+<dialog id="deleteDetailDialog" aria-labelledby="deleteDetailTitle"><h2 id="deleteDetailTitle">登録済み明細を削除しますか？</h2><p id="deleteDetailSummary"></p><div class="record-actions"><button type="button" onclick="$('deleteDetailDialog').close()" autofocus>キャンセル</button><button type="button" id="confirmDeleteDetail" class="delete-detail">削除する</button></div></dialog>
+<script>
+const PAY=['現金','クレジット','QR決済（Airペイ QR）','交通系電子マネー','iD','QUICPay','UnionPay 銀聯','世田谷ペイ','ポイント（ホットペッパーグルメ）','売掛'],FOOD=['キタニ水産','maruyasu','プレコフーズ','西原'],DRINK=['島崎','カクヤス'],CAT=['通信費','人件費','カラオケ代','備品費','旅費交通費','食材費','飲料費','福利厚生費','研修費','修繕費','光熱費','雑費'];
+const $=id=>document.getElementById(id),yen=v=>'¥'+Number(v||0).toLocaleString('ja-JP'),preview=!(window.google&&google.script),drafts={};let tab='売上',activeDate='',busy=false,day={},editId='';
+let depositContext=null,depositReady=false,depositRequest=0,displayMonth='';
+function rpc(name,arg){if(!preview)return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](arg));return Promise.resolve().then(()=>{if(name==='getDepositContext')return previewDepositContext(arg);const key='restaurant-preview-'+(typeof arg==='string'?arg:arg.date).slice(0,7),all=JSON.parse(localStorage.getItem(key)||'{}');if(name==='loadDay'){const out={};['売上','仕入','小口','入金'].forEach(t=>out[t]=(all[t]||[]).filter(x=>x.date===arg));out.vendorSuggestions=[...new Set((all['小口']||[]).slice().reverse().map(x=>x.vendor).filter(Boolean))];return out;}if(name==='deleteDetail')return previewDeleteDetail(arg,key,all);if(arg.tab==='小口'&&Array.isArray(arg.items)){const list=all['小口']||[];arg.items.forEach(x=>{const r={...x,date:arg.date},i=list.findIndex(y=>y.id===x.id);if(i<0)list.push(r);else list[i]=r;});if(list.length>95)throw Error('小口欄は月95件までです');all['小口']=list;localStorage.setItem(key,JSON.stringify(all));return {count:arg.items.length};}const rows=all[arg.tab]||[],id=['売上','入金'].includes(arg.tab)?arg.date:arg.id||crypto.randomUUID(),r={...arg,id},i=rows.findIndex(x=>x.id===id);if(i<0)rows.push(r);else rows[i]=r;all[arg.tab]=rows;localStorage.setItem(key,JSON.stringify(all));return {id};});}
+function previewDeleteDetail(input,key,all){
+ const records=all[input.tab]||[];
+ const index=records.findIndex(record=>record.id===input.id&&record.date===input.date);
+ if(index<0)return null;
+ let remaining=null;
+ if(input.tab==='仕入'){
+  const record=records[index];
+  if(JSON.stringify(record.items)!==JSON.stringify(input.expectedItems))throw Error('仕入れの内容が変わりました。画面を開き直してから操作してください');
+  record.items.splice(input.itemIndex,1);
+  if(record.items.length)remaining=record;
+ }
+ if(!remaining)records.splice(index,1);
+ localStorage.setItem(key,JSON.stringify(all));
+ return remaining;
+}
+function options(select,arr,value){arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;select.append(o);});if(value)select.value=value;}
+function row(parent,names,value={},kind){const r=document.createElement('div');r.className='row';if(kind)r.dataset.kind=kind;const s=document.createElement('select');s.setAttribute('aria-label',kind?kind+'の仕入先':'決済方法');options(s,names,value.name);const i=document.createElement('input');i.type='number';i.min=0;i.step=1;i.inputMode='numeric';i.placeholder='金額（円）';i.setAttribute('aria-label','金額（円）');i.value=value.amount??'';const b=document.createElement('button');b.textContent='×';b.setAttribute('aria-label','この行を削除');b.onclick=()=>{r.remove();capture();totals();};r.append(s,i,b);$(parent).append(r);}
+function addPayment(){const used=[...$('payments').querySelectorAll('select')].map(s=>s.value),next=PAY.find(p=>!used.includes(p));if(!next)return;row('payments',PAY,{name:next});capture();}
+function addItem(kind){row(kind==='食材'?'food':'drink',kind==='食材'?FOOD:DRINK,{},kind);capture();}
+function rows(id){return [...$(id).children].map(r=>({name:r.querySelector('select').value,amount:r.querySelector('input').value,...(r.dataset.kind?{kind:r.dataset.kind}:{})}));}
+function addPetty(value={}){const block=document.createElement('div');block.className='petty-item';block.dataset.id=value.id||crypto.randomUUID();const top=document.createElement('div');top.className='petty-heading';const title=document.createElement('strong');title.textContent='小口明細';const remove=document.createElement('button');remove.textContent='×';remove.setAttribute('aria-label','入力中の小口明細を外す');remove.onclick=()=>{block.remove();capture();totals();};top.append(title,remove);block.append(top);[['category','勘定科目'],['vendor','購入先・支払先'],['amount','金額（税込・円）'],['note','備考']].forEach(([key,text])=>{const label=document.createElement('label');label.textContent=text;const field=document.createElement(key==='category'?'select':key==='note'?'textarea':'input');field.dataset.field=key;if(key==='vendor'){field.setAttribute('list','vendorSuggestions');field.placeholder='過去の購入先から選択・新規入力';}if(key==='category')options(field,CAT,value[key]||'食材費');else{field.value=value[key]??'';if(key==='amount'){field.type='number';field.min=0;field.step=1;field.inputMode='numeric';}else field.maxLength=500;}label.append(field);block.append(label);});$('pettyItems').append(block);capture();totals();}
+function pettyRows(){return [...$('pettyItems').children].map(block=>{const r={id:block.dataset.id};block.querySelectorAll('[data-field]').forEach(f=>r[f.dataset.field]=f.value);return r;});}
+const reservationMedia = [
+ ['walkIn','ウォークイン'], ['hotpepper','ホットペッパー'], ['tabelog','食べログ'],
+ ['ikyu','一休'], ['direct','直予約'], ['other','その他'],
+];
+const reservationFields = reservationMedia.flatMap(([key])=>key==='walkIn'?[key+'Guests']:[key+'Groups',key+'Guests']);
+function syncReservationRows(){
+ const selects=[...$('reservationRows').querySelectorAll('select')];
+ const used=new Set(selects.map(select=>select.value));
+ for(const select of selects){
+  for(const option of select.options)option.disabled=option.value!==select.value&&used.has(option.value);
+ }
+ $('addReservation').disabled=busy||used.size>=reservationMedia.length;
+}
+function addReservationRow(media,record={}){
+ const used=new Set([...$('reservationRows').querySelectorAll('select')].map(select=>select.value));
+ media=media||reservationMedia.find(([key])=>!used.has(key))?.[0];
+ if(!media)return;
+ const row=document.createElement('div');row.className='reservation-row';
+ const select=document.createElement('select');select.setAttribute('aria-label','媒体');
+ options(select,reservationMedia.map(([key])=>key),media);
+ for(const [i,option] of [...select.options].entries())option.textContent=reservationMedia[i][1];
+ const [groups,guests]=['Groups','Guests'].map((suffix,i)=>{
+  const input=document.createElement('input');input.type='number';input.min='0';input.step='1';input.inputMode='numeric';
+  input.setAttribute('aria-label',i===0?'予約組数':'人数');input.value=record[media+suffix]??'';
+  return input;
+ });
+ groups.style.visibility=media==='walkIn'?'hidden':'';
+ select.onchange=()=>{groups.style.visibility=select.value==='walkIn'?'hidden':'';if(select.value==='walkIn')groups.value='';syncReservationRows();capture();};
+ const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','媒体の行を外す');
+ remove.onclick=()=>{row.remove();syncReservationRows();capture();};
+ row.append(select,groups,guests,remove);$('reservationRows').append(row);
+ syncReservationRows();
+}
+function collectReservations(record){
+ for(const row of $('reservationRows').children){
+  const key=row.querySelector('select').value;
+  const [groups,guests]=row.querySelectorAll('input');
+  if(key!=='walkIn')record[key+'Groups']=groups.value;
+  record[key+'Guests']=guests.value;
+ }
+}
+function renderReservations(record){
+ $('reservationRows').replaceChildren();
+ const media=reservationMedia.filter(([key])=>[key+'Groups',key+'Guests'].some(field=>record[field]!==undefined));
+ for(const [key] of media.length?media:[reservationMedia[0]])addReservationRow(key,record);
+}
+function current(){const r={tab,date:activeDate,id:editId};if(tab==='売上'){r.sendLine=$('salesSendLine').checked;r.payments=rows('payments');['tax','groups','guests','labor','reporter','impression'].forEach(k=>r[k]=$(k).value);collectReservations(r);}if(tab==='仕入')r.items=[...rows('food'),...rows('drink')];if(tab==='小口')r.items=pettyRows();if(tab==='入金'){r.sendLine=$('depositSendLine').checked;r.amount=$('deposit').value;r.reporter=$('depositReporter').value;r.note=$('depositNote').value;r.start=$('depositStart').value;r.expected=depositContext?.expected;r.targetDates=depositContext?.days||[];}return r;}
+function capture(){if(activeDate)drafts[activeDate+tab]=current();}
+function totals(){const noteRequired=!!(depositContext&&depositContext.expected!==null&&$('deposit').value!==''&&Number($('deposit').value)!==depositContext.expected);$('depositNote').required=noteRequired;$('depositNoteLabel').textContent=noteRequired?'備考（差異の理由・必須）':'備考';$('depositNoteLabel').style.color=noteRequired?'#a41420':'';if(depositContext&&depositContext.expected!==null&&$('deposit').value!==''){const diff=Number($('deposit').value)-depositContext.expected;$('depositDifference').textContent=(diff>0?'+':'')+yen(diff);$('depositDifference').style.color=diff===0?'var(--green)':'#a41420';}else $('depositDifference').textContent='—';$('pettyTotal').textContent=yen(pettyRows().reduce((sum,r)=>sum+Number(r.amount||0),0));const sum=rows('payments').reduce((s,r)=>s+Number(r.amount||0),0);$('gross').textContent=yen(sum);$('purchaseTotal').textContent=yen([...rows('food'),...rows('drink')].reduce((s,r)=>s+Number(r.amount||0),0));}
+function render(){$("salesSendLine").parentElement.hidden=tab!=="売上";$("depositSendLine").parentElement.hidden=tab!=="入金";document.getElementById("dateLabel").textContent={売上:"売上日",仕入:"仕入日",小口:"支払日",入金:"入金日"}[tab];$('vendorSuggestions').replaceChildren();(day.vendorSuggestions||[]).forEach(name=>{const o=document.createElement('option');o.value=name;$('vendorSuggestions').append(o);});document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==tab);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$('save').textContent=({仕入:'仕入れ',小口:'小口その他'}[tab]||tab)+'を保存';const r=drafts[activeDate+tab]||(['売上','入金'].includes(tab)?(day[tab]||[])[0]:null)||{};editId=r.id||'';if(tab==='売上'){$('salesSendLine').checked=drafts[activeDate+tab]?.sendLine!==false;$('payments').replaceChildren();(r.payments||[{name:'現金'},{name:'クレジット'}]).forEach(x=>row('payments',PAY,x));['tax','groups','guests','labor','reporter','impression'].forEach(k=>$(k).value=r[k]??'');renderReservations(r);}if(tab==='仕入'){$('food').replaceChildren();$('drink').replaceChildren();(r.items||[{kind:'食材',name:FOOD[0]},{kind:'飲料',name:DRINK[0]}]).forEach(x=>row(x.kind==='食材'?'food':'drink',x.kind==='食材'?FOOD:DRINK,x,x.kind));const cr=day['小口']||[];$('pettyTotals').textContent='この日の小口食材 '+yen(cr.filter(x=>x.category==='食材費').reduce((s,x)=>s+Number(x.amount),0))+' ／ 小口酒 '+yen(cr.filter(x=>x.category==='飲料費').reduce((s,x)=>s+Number(x.amount),0));}if(tab==='小口'){const values=r.items||(r.id?[r]:[{}]);$('pettyItems').replaceChildren();values.forEach(x=>addPetty(x));}if(tab==='入金'){$('depositSendLine').checked=drafts[activeDate+tab]?.sendLine!==false;$('deposit').value=r.amount??'';$('depositReporter').value=r.reporter??'';$('depositNote').value=r.note??'';$('depositStart').value=r.start||'';refreshDeposit();}list('仕入','purchaseRecords');list('小口','pettyRecords');totals();}
+function list(t,id){
+ const container=$(id),records=day[t]||[];
+ container.replaceChildren();
+ if(!records.length){container.textContent='まだ登録がありません。';return;}
+ const entries=records.flatMap(record=>t==='仕入'?record.items.map((item,itemIndex)=>({record,item,itemIndex})):[{record}]);
+ for(const {record,item,itemIndex} of entries){
+  const row=document.createElement('div');row.className='record';
+  const summary=document.createElement('span');
+  summary.textContent=t==='仕入'?item.name+' '+yen(item.amount):record.category+' ・ '+record.vendor+' '+yen(record.amount);
+  const actions=document.createElement('div');actions.className='record-actions';
+  const edit=document.createElement('button');edit.textContent='修正';
+  edit.onclick=()=>{drafts[activeDate+t]=record;render();showStatus('登録済み明細を修正中');window.scrollTo({top:0,behavior:'smooth'});};
+  const remove=document.createElement('button');remove.textContent='削除';remove.className='delete-detail';
+  remove.onclick=()=>{
+   const dialog=$('deleteDetailDialog');
+   $('deleteDetailSummary').textContent=record.date+' '+summary.textContent;
+   $('confirmDeleteDetail').onclick=()=>{dialog.close();deleteSavedDetail(t,record,itemIndex);};
+   dialog.showModal();
+  };
+  actions.append(edit,remove);row.append(summary,actions);container.append(row);
+ }
+}
+async function deleteSavedDetail(t,record,itemIndex){
+ if(busy||activeDate!==record.date||tab!==t)return;
+ capture();
+ setBusy(true);
+ showStatus('削除中…');
+ let deleted=false;
+ try{
+  const input={tab:t,date:record.date,id:record.id};
+  if(t==='仕入')Object.assign(input,{itemIndex,expectedItems:record.items});
+  const remaining=await rpc('deleteDetail',input);
+  deleted=true;
+  const key=record.date+t,draft=drafts[key];
+  if(draft?.id===record.id)delete drafts[key];
+  else if(t==='小口'&&draft?.items){
+   draft.items=draft.items.filter(item=>item.id!==record.id);
+   if(!draft.items.length)delete drafts[key];
+  }
+  day[t]=(day[t]||[]).flatMap(item=>item.id!==record.id?[item]:remaining?[remaining]:[]);
+  render();
+  day=await rpc('loadDay',record.date);
+  render();
+  showStatus('明細を削除しました','success');
+ }catch(e){
+  showStatus((deleted?'削除済み・再読み込み失敗：':'削除失敗：')+e.message,deleted?'warning':'error');
+ }finally{setBusy(false);}
+}
+function newEntry(){delete drafts[activeDate+tab];editId='';render();showStatus('新しい明細を入力');}
+function nextDate(s,n){const d=new Date(s+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+function previewDepositContext(input){const sales=[],deposits=[];for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key.startsWith('restaurant-preview-')){const data=JSON.parse(localStorage.getItem(key));sales.push(...(data['売上']||[]));deposits.push(...(data['入金']||[]));}}const previous=deposits.filter(r=>r.date<input.date).sort((a,b)=>b.date.localeCompare(a.date))[0];const start=previous?.date||input.start||'',days=[],cash={};sales.forEach(r=>cash[r.date]=(r.payments||[]).filter(x=>x.name==='現金').reduce((a,x)=>a+Number(x.amount),0));if(start){if(start>=input.date)throw Error('計算開始日は入金日の前日以前を指定してください');for(let d=start;d<input.date;d=nextDate(d,1)){if(days.length>=366)throw Error('計算期間は366日以内です');days.push(d);}}return {previousDate:previous?.date||'',start,end:nextDate(input.date,-1),days,expected:start?days.reduce((a,d)=>a+(cash[d]||0),0):null,missing:days.filter(d=>!(d in cash))};}
+async function refreshDeposit(){
+ const sequence=++depositRequest,date=activeDate;
+ depositReady=false;
+ depositContext=null;
+ $('depositExpected').textContent='計算中…';
+ $('depositPeriod').textContent='計算中…';
+ $('depositWarning').textContent='';
+ $('depositRetry').hidden=true;
+ renderCalendar();
+ const isCurrent=()=>sequence===depositRequest&&date===activeDate&&tab==='入金';
+ try{
+  const result=await rpc('getDepositContext',{date,start:$('depositStart').value});
+  if(!isCurrent())return;
+  depositContext=result;
+  $('depositStart').value=result.start;
+  $('depositStartGroup').hidden=!!result.previousDate;
+  $('depositStart').max=result.end;
+  $('depositPeriod').textContent=result.start?result.start.replace(/-/g,'/')+' 〜 '+result.end.replace(/-/g,'/'):'';
+  $('depositExpected').textContent=result.expected===null?'—':yen(result.expected);
+  $('depositWarning').textContent=result.missing.length?'売上記録なし：'+result.missing.map(d=>d.slice(5).replace('-','/')).join('、'):'';
+  displayMonth=result.end.slice(0,7);
+  depositReady=result.expected!==null;
+  renderCalendar();
+  totals();
+  capture();
+ }catch(e){
+  if(!isCurrent())return;
+  $('depositExpected').textContent='—';
+  $('depositPeriod').textContent='';
+  $('depositRetry').hidden=false;
+  showStatus('予定額の計算失敗：'+e.message,'error');
+ }
+}
+function moveCalendar(offset){
+ if(!depositContext?.start)return;
+ const [year,month]=displayMonth.split('-').map(Number);
+ const next=new Date(Date.UTC(year,month-1+offset,1)).toISOString().slice(0,7);
+ if(next<depositContext.start.slice(0,7)||next>depositContext.end.slice(0,7))return;
+ displayMonth=next;
+ renderCalendar();
+}
+function renderCalendar(){
+ const calendar=$('depositCalendar');
+ calendar.replaceChildren();
+ $('calendarNavigation').hidden=!depositContext?.start;
+ if(!depositContext?.start)return;
+ const [year,month]=displayMonth.split('-').map(Number);
+ $('calendarMonth').textContent=year+'年'+month+'月';
+ $('calendarPrevious').disabled=busy||displayMonth<=depositContext.start.slice(0,7);
+ $('calendarNext').disabled=busy||displayMonth>=depositContext.end.slice(0,7);
+ for(const weekday of '日月火水木金土'){
+  const cell=document.createElement('span');cell.textContent=weekday;calendar.append(cell);
+ }
+ const first=new Date(Date.UTC(year,month-1,1)).getUTCDay();
+ const count=new Date(Date.UTC(year,month,0)).getUTCDate();
+ for(let i=0;i<first;i++)calendar.append(document.createElement('span'));
+ for(let day=1;day<=count;day++){
+  const date=displayMonth+'-'+String(day).padStart(2,'0');
+  const cell=document.createElement('span');
+  cell.textContent=day;
+  if(date>=depositContext.start&&date<=depositContext.end){cell.className='in-period';cell.setAttribute('aria-label',date+' 対象期間内');}
+  calendar.append(cell);
+ }
+}
+function showStatus(message,kind='info'){const el=$('status');el.dataset.kind=kind;el.setAttribute('role',kind==='error'||kind==='warning'?'alert':'status');el.setAttribute('aria-live',kind==='error'||kind==='warning'?'assertive':'polite');const prefix={error:'⚠ エラー：',warning:'⚠ ご確認ください：',success:'✓ '};el.textContent=(prefix[kind]||'')+message;}
+function setBusy(v){busy=v;document.querySelectorAll('button,input,select,textarea').forEach(e=>e.disabled=v);if(!v&&tab==='売上')syncReservationRows();if(!v&&tab==='入金'){$('depositStart').disabled=!!depositContext?.previousDate;renderCalendar();}}
+async function load(){if(!$('date').value)return;capture();activeDate=$('date').value;setBusy(true);try{day=await rpc('loadDay',activeDate);render();showStatus('入力できます');}catch(e){showStatus('読み込み失敗：'+e.message,'error');activeDate='';}finally{setBusy(false);$('save').disabled=!activeDate;}}
+function validate(r){if(r.tab==='売上'){['tax','groups','guests','labor'].forEach(k=>{if(r[k]==='')r[k]=0;});r.payments.forEach(x=>{if(x.amount==='')x.amount=0;});}const nums=r.tab==='売上'?[...r.payments.map(x=>x.amount),r.tax,r.groups,r.guests,r.labor,...(typeof reservationFields==='undefined'?[]:reservationFields.map(key=>r[key]||0))]:[ '仕入','小口'].includes(r.tab)?r.items.map(x=>x.amount):[r.amount];if(!nums.length||nums.some(v=>v===''||!Number.isSafeInteger(Number(v))||Number(v)<0))throw Error('金額・人数は0以上の整数で入力してください（該当なしは0）');if(r.tab==='売上'){if(!r.reporter.trim())throw Error('報告者を入力してください');if(new Set(r.payments.map(x=>x.name)).size!==r.payments.length)throw Error('決済方法が重複しています');if(Number(r.tax)>r.payments.reduce((s,x)=>s+Number(x.amount),0))throw Error('消費税が総売上を超えています');}if(r.tab==='入金'){if(!depositReady)throw Error('対象期間と予定額を確認してから保存してください');if(!r.reporter.trim())throw Error('報告者を入力してください');if(!r.targetDates.length)throw Error('対象期間を確認してください');if(Number(r.amount)!==depositContext.expected&&!String(r.note||'').trim())throw Error('入金差異があるため、備考に理由を入力してください');}if(r.tab==='小口'){r.items.forEach((x,i)=>{if(!x.vendor.trim())throw Error((i+1)+'件目：購入先・支払先を入力してください');});}}
+async function save(){if(busy||!activeDate)return;const r=current();if(['仕入','小口'].includes(tab)&&!r.id){r.id=crypto.randomUUID();editId=r.id;drafts[activeDate+tab]=r;}try{validate(r);}catch(e){showStatus(e.message,'error');return;}setBusy(true);showStatus('保存中…');let saved=false;try{const result=await rpc('saveRecord',r);saved=true;delete drafts[activeDate+tab];day=await rpc('loadDay',activeDate);render();if(result.notification){showStatus(result.notification.message,['accepted','skipped'].includes(result.notification.status)?'success':'warning');}else{showStatus(preview?'ブラウザに保存しました（LINE通知は送信しません）':'保存しました','success');}}catch(e){if(!saved&&tab==='入金'&&e.message.includes('予定額・計算期間が変わりました')){await refreshDeposit();if(depositReady)showStatus('予定額が変わりました。確認してもう一度保存してください','warning');return;}showStatus((saved?'保存済み・再読み込み失敗：':'保存失敗：')+e.message,saved?'warning':'error');}finally{setBusy(false);}}
+[['売上','売上'],['仕入','仕入れ'],['小口','小口その他'],['入金','入金台帳']].forEach(([t,label])=>{const b=document.createElement('button');b.dataset.tab=t;b.textContent=label;b.onclick=()=>{capture();tab=t;render();showStatus('入力できます');};document.querySelector('nav').append(b);});
+document.querySelector('main').addEventListener('input',e=>{if(e.target.id!=='date'){capture();totals();}});document.querySelector('main').addEventListener('change',e=>{if(e.target.id!=='date')capture();});$('depositStart').addEventListener('change',()=>refreshDeposit());$('date').onchange=load;$('date').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());$('mode').hidden=!preview;load();
+</script></body></html>
+
+
+
