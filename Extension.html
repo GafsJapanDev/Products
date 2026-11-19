@@ -1,0 +1,62 @@
+
+<style>
+nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
+.ext-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ext-line{padding:12px 0;border-bottom:1px solid var(--line)}.ext-line input,.ext-line select{min-height:44px;padding:8px}
+.ext-fields{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:8px}.ext-fields label{font-size:13px;margin:8px 0}.ext-fields input{min-width:0}
+.ext-scroll{overflow:auto}.ext-table{border-collapse:collapse;width:100%;font-size:14px}.ext-table td,.ext-table th{padding:10px;border-bottom:1px solid var(--line);text-align:left}
+.ext-table input{min-width:95px}#extOcrText{width:100%;min-height:130px}.ext-warning{color:#a41420;white-space:pre-line}.ext-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.ext-check input{width:auto;min-height:24px}.ext-badge{background:#fff0cb;padding:10px;font-weight:bold}.ext-hidden[hidden]{display:none}
+</style>
+<div class="ext-badge">拡張テスト版 ／ LINE送信停止中</div>
+<section id="納品伝票" hidden>
+ <div class="card"><h2>納品伝票を記録</h2>
+ <div class="ext-grid"><label>仕入先<input id="extSupplier" list="extSuppliers"></label><label>伝票番号<input id="extInvoiceNumber"></label></div>
+ <label>入力方法<select id="extLegacy"><option value="">新しい伝票</option></select></label>
+ <div class="ext-grid"><label>種類<select id="extType"><option value="delivery">納品</option><option value="return">容器回収・返金</option></select></label><label>税区分<select id="extTaxMode"><option value="gross">税込</option><option value="net">税別・税額あり</option><option value="monthly">税別・月末加算</option></select></label></div>
+ <div class="ext-grid"><label>伝票に印字された合計<input id="extTotal" type="number" min="0" step="0.01"></label><label>税額（税別・税額ありの場合）<input id="extTax" type="number" min="0" step="0.01"></label></div>
+ <label>調整額（値引きはマイナス）<input id="extAdjustment" type="number" step="0.01" value="0"></label>
+ <div id="extLines"></div><button type="button" id="extAddLine">＋ 品目を追加</button>
+ <label>差額・調整の理由<textarea id="extReason"></textarea></label>
+ <p id="extInvoiceFiles"></p>
+ <div class="ext-actions"><button id="extSaveInvoice">伝票を保存</button><button id="extNewInvoice">新しい伝票</button><button id="extCancelInvoice">この伝票を取消</button></div>
+ </div>
+ <div class="card"><h3>この日の伝票</h3><div id="extInvoiceList"></div></div>
+ <div class="card"><h3>月末の税額</h3><p class="hint">月末加算の伝票分のみ。食材・飲料・雑費を分けて入力します。</p>
+ <label>対象月<input id="extTaxMonth" type="month"></label>
+ <div class="ext-grid"><label>食材税額<input id="extFoodTax" type="number" min="0"></label><label>飲料税額<input id="extDrinkTax" type="number" min="0"></label></div>
+ <label>雑費税額<input id="extMiscTax" type="number" min="0"></label><label>備考<input id="extTaxNote"></label><button id="extSaveTax">月末税額を保存</button>
+ </div>
+</section>
+<section id="帳票読取" hidden><div class="card"><h2>帳票を読み取る</h2>
+ <label>帳票<select id="extOcrKind"><option value="invoice">納品伝票</option><option value="journal">売上ジャーナル</option></select></label>
+ <label>仕入先<input id="extOcrSupplier" list="extSuppliers"></label>
+ <label>写真・PDFを追加<input id="extUpload" type="file" accept="image/jpeg,image/png,application/pdf" multiple></label>
+ <p class="hint">原本をDriveに保存してから読み取ります。複数枚は同じ伝票にまとめられます。</p>
+ <button id="extReadOcr">保存して読み取る</button><p id="extOcrWarning" class="ext-warning"></p>
+ <div id="extOcrSources"></div><label>読み取った原文<textarea id="extOcrText" readonly></textarea></label>
+ <label>読取候補（反映後のフォームで修正できます）<textarea id="extOcrDraft" rows="8" readonly></textarea></label>
+ <label class="ext-check"><input id="extOcrConfirmed" type="checkbox">原本と読み取り内容を確認した</label>
+ <button id="extApplyOcr">入力フォームへ反映</button>
+ </div></section>
+<section id="棚卸" hidden><div class="card"><h2>月末棚卸</h2>
+ <label>対象月<input id="extStockMonth" type="month"></label><button id="extLoadStock">一覧を表示</button>
+ <p id="extStockState"></p><div class="ext-grid"><label>実施者<select id="extImplementer"><option value="">選択</option><option>高杉</option><option>荒川</option></select></label><label>確認者<select id="extReviewer"><option value="">選択</option><option>高杉</option><option>荒川</option></select></label></div>
+ <div class="ext-scroll"><table class="ext-table"><thead><tr><th>品目・仕入先</th><th>数量</th><th>単位</th><th>税込単価</th></tr></thead><tbody id="extStockRows"></tbody></table></div>
+ <label>既存在庫を追加<select id="extStockProduct"></select></label><button id="extAddStock">＋ 在庫品目</button>
+ <div class="ext-actions"><button data-stock="draft">下書き保存</button><button data-stock="refresh">最新の単価を反映</button><button data-stock="review">確認依頼</button><button data-stock="confirm">確認者として確定</button><button data-stock="return">差戻し</button><button data-stock="reopen">確定を再開</button></div>
+ </div>
+ <div class="card"><h3>品目・換算を登録</h3><div class="ext-grid"><label>仕入先<input id="extProductSupplier" list="extSuppliers"></label><label>商品コード<input id="extProductSku"></label></div>
+ <label>品名<input id="extProductName"></label><label>棚卸単位<input id="extProductUnit"></label>
+ <label>検索の別名（読点区切り）<input id="extProductAliases"></label>
+ <label>換算（JSON。例：1箱＝10kgなら {"箱":10}）<input id="extConversions" value="{}"></label>
+ <select id="extProductSelect"><option value="">新規登録</option></select><button id="extSaveProduct">品目を保存</button>
+ </div></section>
+<section id="AI" hidden><div class="card"><h2>AIアシスタント</h2>
+ <label>質問<textarea id="extQuestion" placeholder="直近のぶりの仕入れ値は？"></textarea></label>
+ <div id="extExamples" class="ext-actions"></div><button id="extAsk">質問する</button>
+ <p id="extAiState" aria-live="polite"></p><div id="extAnswer"></div>
+ </div><div class="card"><h3>定型検索</h3><p class="hint">AIが使えないときも検索できます。</p>
+ <label>検索<select id="extQueryName"><option value="latestPrices">直近の単価</option><option value="monthlyTotals">仕入先の3か月推移</option><option value="itemComparison">先月との品目比較</option></select></label>
+ <label>仕入先<input id="extQuerySupplier" list="extSuppliers"></label><label>品名<input id="extQueryItem"></label><button id="extQuery">検索</button>
+ </div></section>
+<datalist id="extSuppliers"></datalist>

@@ -1,0 +1,192 @@
+
+<script>
+const extTabs=['納品伝票','帳票読取','棚卸','AI'];
+let extOcrDraft=null;let extContext=null,extInvoice=null,extStock=null,extOcrFiles=[],extUploadCache=[],extPending=null,extJournal={};
+const extOriginalRender=render,extOriginalCapture=capture,extOriginalCurrent=current;
+capture=function(){if(!extTabs.includes(tab))extOriginalCapture();else if(tab==='納品伝票'&&extInvoice){const r=extInvoiceInput('confirmed');extInvoice={...extInvoice,...r,supplier:{name:r.supplier}};}};
+current=function(){const r=extOriginalCurrent();if(tab==='売上')r.journalFiles=extJournal[activeDate]||(day.売上?.[0]?.journalFiles||[]);return r;};
+render=function(){
+ document.querySelector('.save-actions').hidden=extTabs.includes(tab);
+ if(!extTabs.includes(tab)){extOriginalRender();return;}
+ document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==tab);
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+ $('dateLabel').textContent=tab==='納品伝票'?'納品日':tab==='AI'?'集計基準日':'日付';
+ extLoadContext().catch(e=>showStatus(e.message,'error'));
+};
+async function extRun(fn){
+ if(busy)return;setBusy(true);showStatus('処理中…');
+ try{await fn();showStatus('処理が完了しました','success');}
+ catch(e){showStatus(e.message,'error');}
+ finally{setBusy(false);if(extTabs.includes(tab))document.querySelector('.save-actions').hidden=true;}
+}
+function extSelect(el,values,value){el.replaceChildren();values.forEach(x=>{const o=document.createElement('option');o.value=typeof x==='string'?x:x.id;o.textContent=typeof x==='string'?x:x.label;el.append(o);});if(value!=null)el.value=value;}
+function extVal(id){return $(id).value;}
+function extSet(id,value){$(id).value=value??'';}
+function extLink(parent,name,url){if(!/^https:\/\/(?:drive|docs)\.google\.com\//.test(url||''))return;const a=document.createElement('a');a.textContent=name;a.href=url;a.target='_blank';a.rel='noopener';parent.append(a,document.createElement('br'));}
+async function extLoadContext(){
+ const date=activeDate,result=await rpc('extensionContext',{date});if(date!==activeDate)return;extContext=result;
+ extSelect($('extSuppliers'),result.suppliers);
+ extSelect($('extProductSelect'),[{id:'',label:'新規登録'},...result.products.map(p=>({id:p.id,label:p.supplier+'／'+p.name}))]);
+ extSelect($('extStockProduct'),result.products.map(p=>({id:p.id,label:p.supplier+'／'+p.name})));
+ $('extInvoiceList').replaceChildren();
+ result.invoices.forEach(i=>{const b=document.createElement('button');b.textContent=i.supplier.name+' '+i.printedTotal+'円 '+(i.status==='cancelled'?'取消':'');b.onclick=()=>extEditInvoice(i);$('extInvoiceList').append(b);});
+ if(tab==='納品伝票'){if(!extInvoice||extInvoice.date!==date)extEditInvoice(null);else extEditInvoice(extInvoice);}
+ if(!$('extStockMonth').value)$('extStockMonth').value=date.slice(0,7);
+ if(!$('extTaxMonth').value)$('extTaxMonth').value=date.slice(0,7);
+}
+function extEditInvoice(invoice){
+ extInvoice=invoice?structuredClone(invoice):{id:crypto.randomUUID(),date:activeDate,version:0,lines:[],files:[]};
+ const i=extInvoice;
+ extSet('extSupplier',i.supplier?.name);extSet('extInvoiceNumber',i.invoiceNumber);extSet('extType',i.type||'delivery');
+ extSet('extTaxMode',i.taxMode||'gross');extSet('extTotal',i.printedTotal);extSet('extTax',i.tax);extSet('extAdjustment',i.adjustment||0);extSet('extReason',i.reason);
+ $('extLines').replaceChildren();i.lines.forEach(extAddLine);
+ const legacy=[{id:'',label:'新しい伝票'}];extContext?.legacy.forEach(r=>r.items.forEach((item,index)=>legacy.push({id:r.id+'|'+index,label:r.date+' '+item.name+' '+item.amount+'円'})));
+ extSelect($('extLegacy'),legacy,i.legacyLink?i.legacyLink.recordId+'|'+i.legacyLink.itemIndex:'');
+ $('extInvoiceFiles').replaceChildren();i.files.forEach(f=>extLink($('extInvoiceFiles'),f.name,f.url));extPending=null;
+}
+function extAddLine(value={}){
+ const line=document.createElement('div');line.className='ext-line';
+ const fields=[['name','品名','text'],['sku','商品コード','text'],['qty','数量','number'],['unit','単位','text'],['price','単価','number'],['amount','明細金額','number']];
+ const grid=document.createElement('div');grid.className='ext-fields';
+ fields.forEach(([key,label,type])=>{const l=document.createElement('label');l.textContent=label;const e=document.createElement('input');e.type=type;e.dataset.key=key;e.value=value[key]??'';if(type==='number'){e.min='0';e.step='any';}l.append(e);grid.append(l);});
+ for(const [key,label,values] of [['category','分類',['食材','飲料','雑費','容器']],['rate','税率',['','0','8','10']]]){
+  const l=document.createElement('label');l.textContent=label;const e=document.createElement('select');e.dataset.key=key;extSelect(e,values,value[key]??(key==='category'?'食材':''));l.append(e);grid.append(l);
+ }
+ const reason=document.createElement('input');reason.dataset.key='reason';reason.placeholder='金額差の理由';reason.value=value.reason||'';grid.append(reason);
+ const remove=document.createElement('button');remove.textContent='× この品目を外す';remove.onclick=()=>line.remove();line.append(grid,remove);$('extLines').append(line);
+}
+function extInvoiceInput(status){
+ const r={id:extInvoice.id,version:extInvoice.version,date:activeDate,supplier:extVal('extSupplier'),invoiceNumber:extVal('extInvoiceNumber'),
+ type:extVal('extType'),taxMode:extVal('extTaxMode'),printedTotal:extVal('extTotal'),tax:extVal('extTax'),adjustment:extVal('extAdjustment'),
+ reason:extVal('extReason'),status,fileIds:extInvoice.files.map(f=>f.id),lines:[...$('extLines').children].map(el=>Object.fromEntries([...el.querySelectorAll('[data-key]')].map(e=>[e.dataset.key,e.value])))};
+ const selected=extVal('extLegacy');
+ if(selected){const [recordId,index]=selected.split('|'),record=extContext.legacy.find(r=>r.id===recordId);r.legacyLink={month:activeDate.slice(0,7),recordId,itemIndex:Number(index),fingerprint:JSON.stringify(record.items[Number(index)])};}
+ return r;
+}
+async function extSaveInvoice(status='confirmed'){
+ const input=extInvoiceInput(status),fingerprint=JSON.stringify(input);
+ if(!extPending||extPending.fingerprint!==fingerprint)extPending={fingerprint,opId:crypto.randomUUID()};
+ input.opId=extPending.opId;
+ let result=await rpc('saveExtensionInvoice',input);
+ if(result.needsDuplicateConfirmation){if(!confirm('同じ仕入先・伝票番号または金額の伝票があります。別の伝票として保存しますか？'))return;input.duplicateConfirmed=true;result=await rpc('saveExtensionInvoice',input);}
+ extInvoice=result.invoice;await extLoadContext();extEditInvoice(result.invoice);
+}
+$('extAddLine').onclick=()=>extAddLine();$('extNewInvoice').onclick=()=>extEditInvoice(null);
+$('extSaveInvoice').onclick=()=>extRun(()=>extSaveInvoice());
+$('extCancelInvoice').onclick=()=>{if(extInvoice?.version&&confirm('この伝票だけを取り消します。原本と履歴は残ります。'))extRun(()=>extSaveInvoice('cancelled'));};
+$('extSaveTax').onclick=()=>extRun(async()=>{
+ const month=extVal('extTaxMonth'),supplier=extVal('extSupplier'),old=extContext.taxes.find(t=>t.month===month&&t.supplier===supplier);
+ await rpc('saveExtensionMonthlyTax',{opId:crypto.randomUUID(),version:old?.version||0,month,supplier,foodTax:extVal('extFoodTax'),drinkTax:extVal('extDrinkTax'),miscTax:extVal('extMiscTax'),note:extVal('extTaxNote')});await extLoadContext();
+});
+$('extProductSelect').onchange=()=>{const p=extContext.products.find(p=>p.id===extVal('extProductSelect'));if(!p)return;
+ [['extProductSupplier',p.supplier],['extProductSku',p.sku],['extProductName',p.name],['extProductUnit',p.unit],['extProductAliases',p.aliases.join('、')],['extConversions',JSON.stringify(p.conversions)]].forEach(([id,v])=>extSet(id,v));
+};
+$('extSaveProduct').onclick=()=>extRun(async()=>{
+ const old=extContext.products.find(p=>p.id===extVal('extProductSelect'));
+ await rpc('saveExtensionProduct',{opId:crypto.randomUUID(),version:old?.version||0,supplier:extVal('extProductSupplier'),sku:extVal('extProductSku'),name:extVal('extProductName'),unit:extVal('extProductUnit'),aliases:extVal('extProductAliases').split('、').filter(Boolean),conversions:JSON.parse(extVal('extConversions'))});await extLoadContext();
+});
+function extRenderStock(){
+ $('extStockState').textContent=extStock.date+' 時点 ／ '+({draft:'下書き',review:'確認待ち',confirmed:'確定'}[extStock.status])+(extStock.fresh?'':' ／ 要再確認');
+ $('extStockState').className=extStock.fresh?'':'ext-warning';
+ extSet('extImplementer',extStock.implementer);extSet('extReviewer',extStock.reviewer);$('extStockRows').replaceChildren();
+ extStock.rows.forEach(r=>{
+  const tr=document.createElement('tr');tr.dataset.id=r.productId;
+  const name=document.createElement('td');name.textContent=r.name+'／'+r.supplier+(r.problem?'：'+r.problem:'');tr.append(name);
+  for(const key of ['qty','unit','price']){const td=document.createElement('td');if(key==='unit'){td.textContent=r.unit;}else{const e=document.createElement('input');e.type='number';e.min='0';e.step='any';e.dataset.key=key;e.value=r[key]??'';e.setAttribute('aria-label',r.name+(key==='qty'?'数量':'税込単価'));e.readOnly=extStock.status!=='draft'||(key==='price'&&r.priceSource!=='手動'&&r.priceSource!=='');td.append(e);}tr.append(td);}
+  $('extStockRows').append(tr);
+ });
+}
+function extStockInput(action){
+ return {opId:crypto.randomUUID(),month:extStock.month,version:extStock.version,action,sourceFingerprint:action==='refresh'?extStock.latestFingerprint||extStock.sourceFingerprint:extStock.sourceFingerprint,
+  implementer:extVal('extImplementer'),reviewer:extVal('extReviewer'),rows:[...$('extStockRows').children].map(tr=>({productId:tr.dataset.id,qty:tr.querySelector('[data-key="qty"]').value,price:tr.querySelector('[data-key="price"]').value}))};
+}
+$('extLoadStock').onclick=()=>extRun(async()=>{extStock=await rpc('getExtensionStock',{month:extVal('extStockMonth')});extRenderStock();});
+$('extAddStock').onclick=()=>{if(!extStock||extStock.status!=='draft')return;const p=extContext.products.find(p=>p.id===extVal('extStockProduct'));if(!p||extStock.rows.some(r=>r.productId===p.id))return;
+ const inputs=extStockInput('draft').rows;extStock.rows.forEach(r=>r.qty=inputs.find(x=>x.productId===r.productId).qty);
+ extStock.rows.push({productId:p.id,name:p.name,supplier:p.supplier,unit:p.unit,qty:null,price:null,priceSource:'手動'});extRenderStock();};
+document.querySelectorAll('[data-stock]').forEach(b=>b.onclick=()=>extRun(async()=>{
+ if(!extStock)throw Error('一覧を表示してください');const action=b.dataset.stock;if(action==='confirm'&&!confirm(extStock.reviewer+'として確認し確定しますか？'))return;
+ if(action==='refresh'){
+  const latest=await rpc('getExtensionStock',{month:extStock.month}),current=extStockInput(action).rows;
+  const rows=latest.latestRows||latest.rows;extStock.rows=rows.map(r=>({...r,qty:current.find(x=>x.productId===r.productId)?.qty??null}));
+  current.filter(r=>!rows.some(x=>x.productId===r.productId)).forEach(r=>{const p=extContext.products.find(x=>x.id===r.productId);if(p)extStock.rows.push({...p,productId:p.id,qty:r.qty,price:r.price,priceSource:'手動'});});
+  extStock.latestFingerprint=latest.latestFingerprint||latest.sourceFingerprint;
+  extRenderStock();
+ }
+ extStock=await rpc('saveExtensionStock',extStockInput(action));extRenderStock();
+}));
+$('extUpload').onchange=()=>{extUploadCache=[];extOcrFiles=[];$('extOcrConfirmed').checked=false;};
+async function extReadFile(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=()=>reject(Error('ファイルを読めません'));r.readAsDataURL(file);});}
+$('extReadOcr').onclick=()=>extRun(async()=>{
+ const files=[...$('extUpload').files];if(!files.length)throw Error('写真・PDFを選択してください');
+ if(!extUploadCache.length)extUploadCache=files.map(f=>({file:f,id:crypto.randomUUID()}));
+ extOcrFiles=[];const results=[];
+ for(const entry of extUploadCache){
+  const source=await rpc('archiveExtensionDocument',{id:entry.id,month:activeDate.slice(0,7),name:entry.file.name,mime:entry.file.type,base64:await extReadFile(entry.file)});
+  extOcrFiles.push(source);
+  results.push(await rpc('readExtensionOcr',{fileId:source.id,kind:extVal('extOcrKind'),supplier:extVal('extOcrSupplier')}));
+ }
+ const draft=results[0].draft;
+ if(draft.kind==='invoice'){
+  draft.lines=results.flatMap(r=>r.draft.lines);
+  const totals=results.map(r=>r.draft.printedTotal).filter(v=>v!==null);
+  draft.printedTotal=totals.length===1?totals[0]:null;
+  if(totals.length!==1)draft.warnings.push('合計が複数または未取得です。全ページで1回分の合計を確認してください。');
+ }
+ $('extOcrText').value=results.map((r,i)=>'【'+(i+1)+'枚目】\n'+r.text).join('\n');
+ extOcrDraft=draft;$('extOcrDraft').value=draft.kind==='journal'?'営業日：'+draft.date+'\n総売上：'+(draft.total??'未取得')+'\n消費税：'+(draft.tax??'未取得')+'\n組数：'+(draft.groups??'未取得')+'\n人数：'+(draft.guests??'未取得'): '納品日：'+draft.date+'\n仕入先：'+draft.supplier+'\n伝票番号：'+draft.invoiceNumber+'\n印字合計：'+(draft.printedTotal??'未取得')+'\n明細候補：'+draft.lines.length+'件';$('extOcrWarning').textContent=draft.warnings.join('\n');
+ $('extOcrSources').replaceChildren();extOcrFiles.forEach(f=>extLink($('extOcrSources'),f.name,f.url));
+});
+$('extApplyOcr').onclick=()=>{
+ try{
+  if(!$('extOcrConfirmed').checked)throw Error('原本との照合にチェックしてください');
+  const d=extOcrDraft;if(!d)throw Error('先に帳票を読み取ってください');
+  if(d.kind==='journal'){
+   if(d.date&&d.date!==activeDate)throw Error('上の日付をジャーナルの営業日に合わせてください');
+   tab='売上';render();
+   if(d.tax!=null)extSet('tax',d.tax);if(d.groups!=null)extSet('groups',d.groups);if(d.guests!=null)extSet('guests',d.guests);
+   if(d.payments?.length){$('payments').replaceChildren();d.payments.forEach(x=>row('payments',PAY,x));}
+   extJournal[activeDate]=[...new Set([...(day.売上?.[0]?.journalFiles||[]),...extOcrFiles.map(f=>f.id)])];capture();totals();
+   showStatus('読取候補を反映しました。金額を確認して売上を保存してください'+(d.total!=null?' ／ 印字総売上 '+d.total+'円':''),'warning');
+  }else{
+   if(d.date&&d.date!==activeDate)throw Error('上の日付を納品日に合わせてください');
+   tab='納品伝票';extEditInvoice({id:crypto.randomUUID(),version:0,date:activeDate,supplier:{name:d.supplier},...d,lines:d.lines||[],files:extOcrFiles});render();
+   showStatus('伝票フォームに反映しました。内容を確認して保存してください','warning');
+  }
+ }catch(e){showStatus(e.message,'error');}
+};
+function extDisplayResults(results){
+ $('extAnswer').replaceChildren();
+ results.forEach(result=>{
+
+  const title=document.createElement('p');
+  title.textContent=result.confirmation||(result.tool==='latestPrices'?'直近の仕入単価（'+result.asOf+'時点）':result.tool==='monthlyTotals'?'伝票合計の月別推移 ／ '+result.supplier+' ／ '+result.asOf+'時点':'品目別の増減 ／ '+result.supplier);
+  $('extAnswer').append(title);
+  if(result.candidates?.length){const p=document.createElement('p');p.textContent=result.candidates.join('、');$('extAnswer').append(p);}
+  if(result.range){const p=document.createElement('p');p.textContent='比較：'+result.range.previous.start+'〜'+result.range.previous.end+' ／ '+result.range.current.start+'〜'+result.range.current.end;$('extAnswer').append(p);}
+  const basis={gross:'税込',net:'税抜',monthly:'税抜・月締税'};
+  const table=document.createElement('table');table.className='ext-table';
+  (result.rows||[]).forEach(r=>{
+   const tr=document.createElement('tr'),values=result.tool==='latestPrices'?[r.supplier,r.name,r.date,r.price===null?'単価未入力':r.price+'円／'+r.unit,basis[r.taxBasis]]:
+    result.tool==='monthlyTotals'?[r.month,r.total===null?'該当データなし':r.total.toLocaleString()+'円',r.state==='tax_pending'?'税額未確定':r.state==='no_data'?'':'税込合計',r.count+'件']:
+    [r.name,'先月 '+r.previous+'円 → 今月 '+r.current+'円','増減 '+(r.increase>0?'+':'')+r.increase+'円',r.unit,basis[r.taxBasis],
+      r.quantityIncomplete?'数量未入力あり':'数量 '+r.previousQty+' → '+r.currentQty,
+      '平均単価 '+(r.previousUnitPrice??'—')+' → '+(r.currentUnitPrice??'—')];
+   values.forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td);});table.append(tr);
+  });$('extAnswer').append(table);
+  if(!result.rows?.length&&!result.confirmation){const p=document.createElement('p');p.textContent='該当データなし';$('extAnswer').append(p);}
+  if(result.periodState&&Object.values(result.periodState).includes('no_data')){const p=document.createElement('p');p.textContent='比較期間に未入力の月があります。増減は登録済み明細の範囲です。';p.className='ext-warning';$('extAnswer').append(p);}
+  if(result.missingDetails){const p=document.createElement('p');p.className='ext-warning';p.textContent='明細未入力の伝票：'+result.missingDetails+'件。品目の回答には含まれません。';$('extAnswer').append(p);}
+  (result.rows||[]).forEach(r=>(r.links||[]).forEach(l=>extLink($('extAnswer'),l.name,l.url)));
+ });
+}
+$('extAsk').onclick=()=>extRun(async()=>{
+ const r=await rpc('askExtensionAssistant',{question:extVal('extQuestion'),asOf:activeDate});$('extAiState').textContent=r.answer;$('extAiState').className=r.available?'':'ext-warning';extDisplayResults(r.results);
+});
+$('extQuery').onclick=()=>extRun(async()=>{const result=await rpc('queryExtensionData',{name:extVal('extQueryName'),args:{supplier:extVal('extQuerySupplier'),item:extVal('extQueryItem')},asOf:activeDate});$('extAiState').textContent='登録済みデータの集計';extDisplayResults([result]);});
+['直近のぶりの仕入れ値は？','ここ3か月のキタニ水産の仕入額の推移は？','キタニ水産の3か月推移と、先月より一番増えた品目を教えて'].forEach(q=>{
+ const b=document.createElement('button');b.textContent=q;b.onclick=()=>extSet('extQuestion',q);$('extExamples').append(b);
+});
+extTabs.forEach(t=>{const b=document.createElement('button');b.dataset.tab=t;b.textContent=t==='AI'?'AIアシスタント':t;b.onclick=()=>{capture();tab=t;render();};document.querySelector('nav').append(b);});
+$('salesSendLine').checked=false;$('depositSendLine').checked=false;
+</script>
