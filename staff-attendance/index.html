@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>職員の勤怠・食事記録</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f0f5f3;color:#17352d;font:16px/1.5 system-ui,sans-serif}header{background:#143d32;color:white;padding:24px max(20px,calc((100% - 980px)/2))}h1{margin:0;font-size:clamp(23px,4vw,34px)}main{max-width:1020px;margin:auto;padding:22px 20px 48px}.bar,.stats,.actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.bar{justify-content:space-between}.stats{margin:18px 0}.stats div{background:#dcece4;border-radius:12px;padding:12px 16px;flex:1;min-width:115px}.stats strong{display:block;font-size:24px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}article,details{background:white;border:1px solid #cfded7;border-radius:14px;padding:16px}h2{margin:0 0 8px;font-size:20px}fieldset{margin:10px 0 0;border:1px solid #d9e5df;border-radius:9px;padding:8px 10px 10px}legend{font-weight:650}button,input,select{font:inherit;min-height:44px;border:1px solid #8ba79a;border-radius:8px;padding:7px 10px;background:white;color:inherit}input[type=time]{display:block;margin-top:3px}button{cursor:pointer}.primary{color:white;background:#17634b;border-color:#17634b}button:disabled{opacity:.5;cursor:default}details{margin-top:20px}summary{cursor:pointer;font-weight:700}form{margin-top:12px}#notice{min-height:24px;margin:10px 0;color:#8b3527}small{font-size:14px}label{display:inline-block}select{width:100%}
+</style>
+</head>
+<body>
+<header><h1>職員の勤怠・食事記録</h1></header>
+<main>
+<div class="bar"><label>記録日 <input id="day" type="date" required></label><button id="today">今日</button></div>
+<div class="stats" id="stats" aria-label="記録日の集計"></div>
+<div id="cards" class="cards"></div>
+<details id="settings"><summary>職員登録</summary>
+<form id="register" class="actions"><label>氏名 <input id="name" required maxlength="60" autocomplete="off"></label><button class="primary">追加</button></form>
+</details>
+<p id="notice" role="status"></p>
+<small>入力はこのブラウザに保存されます。時刻は日本時間です。</small>
+</main>
+<script>
+'use strict';
+const key = 'staff-attendance-v1';
+const dateField = document.querySelector('#day');
+const cards = document.querySelector('#cards');
+const stats = document.querySelector('#stats');
+const settings = document.querySelector('#settings');
+const notice = document.querySelector('#notice');
+const names = document.querySelector('#name');
+const meals = { '': '未入力', yes: '食べた', no: '食べなかった' };
+const dateFormat = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function load() {
+  return JSON.parse(localStorage.getItem(key)) ?? { staff: [], days: {} };
+}
+function save(change) {
+  try {
+    const state = load();
+    change(state);
+    localStorage.setItem(key, JSON.stringify(state));
+    notice.textContent = '';
+    return true;
+  } catch (error) {
+    notice.textContent = error.message;
+    return false;
+  }
+}
+function element(tag, text) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function record(id, field, value) {
+  const day = dateField.value;
+  if (!day) return;
+  save(state => {
+    state.days[day] ??= {};
+    state.days[day][id] ??= {};
+    state.days[day][id][field] = value;
+  });
+  render();
+}
+function timeField(id, entry, field, labelText) {
+  const group = element('fieldset');
+  group.append(element('legend', labelText));
+  const label = element('label', '時刻');
+  const input = element('input');
+  input.type = 'time';
+  input.value = entry[field] || '';
+  input.addEventListener('change', () => record(id, field, input.value));
+  label.append(input);
+  group.append(label);
+  const stamp = element('button', labelText + 'を打刻');
+  stamp.className = 'primary';
+  stamp.disabled = dateField.value !== dateFormat.format(new Date()) || Boolean(entry[field]);
+  stamp.addEventListener('click', () => {
+    const now = new Date();
+    if (dateField.value === dateFormat.format(now)) record(id, field, timeFormat.format(now));
+    else render();
+  });
+  group.append(' ', stamp);
+  return group;
+}
+function mealField(id, entry, field, labelText) {
+  const group = element('fieldset');
+  group.append(element('legend', labelText));
+  const select = element('select');
+  select.setAttribute('aria-label', labelText);
+  for (const [value, label] of Object.entries(meals)) select.add(new Option(label, value));
+  select.value = entry[field] || '';
+  select.addEventListener('change', () => record(id, field, select.value));
+  group.append(select);
+  return group;
+}
+function render() {
+  cards.replaceChildren();
+  stats.replaceChildren();
+  try {
+    const state = load();
+    if (!dateField.value) {
+      cards.append(element('p', '記録日を選択してください。'));
+      return;
+    }
+    const entries = state.days[dateField.value] || {};
+    const dayEntries = Object.values(entries);
+    const summary = [
+      ['出勤打刻', dayEntries.filter(item => item.start).length],
+      ['退勤打刻', dayEntries.filter(item => item.end).length],
+      ['給食を食べた', dayEntries.filter(item => item.lunch === 'yes').length],
+      ['おやつを食べた', dayEntries.filter(item => item.snack === 'yes').length]
+    ];
+    for (const [label, count] of summary) {
+      const metric = element('div', label);
+      metric.append(element('strong', count + '人'));
+      stats.append(metric);
+    }
+    if (!state.staff.length) cards.append(element('p', '「職員登録」から氏名を追加してください。'));
+    for (const { id, name } of state.staff) {
+      const entry = entries[id] || {};
+      const card = element('article');
+      const times = element('div');
+      times.className = 'actions';
+      times.append(timeField(id, entry, 'start', '出勤'), timeField(id, entry, 'end', '退勤'));
+      card.append(element('h2', name), times, mealField(id, entry, 'lunch', '給食'), mealField(id, entry, 'snack', 'おやつ'));
+      cards.append(card);
+    }
+  } catch {
+    notice.textContent = '保存済みの記録を読み込めませんでした。ブラウザの保存設定を確認してください。';
+  }
+}
+document.querySelector('#register').addEventListener('submit', event => {
+  event.preventDefault();
+  const name = names.value.trim();
+  if (!name) {
+    notice.textContent = '氏名を入力してください。';
+    return;
+  }
+  if (save(state => {
+    if (state.staff.some(person => person.name === name)) throw new Error('同じ氏名が登録済みです。');
+    state.staff.push({ id: globalThis.crypto.randomUUID?.() ?? String(Date.now()), name });
+  })) {
+    event.target.reset();
+    settings.open = false;
+    render();
+  }
+});
+function showToday() {
+  dateField.value = dateFormat.format(new Date());
+  render();
+}
+document.querySelector('#today').addEventListener('click', showToday);
+dateField.addEventListener('change', render);
+window.addEventListener('storage', event => {
+  if (event.key === key || event.key === null) render();
+});
+showToday();
+if (!cards.querySelector('article')) settings.open = true;
+</script>
+</body>
+</html>
