@@ -20,7 +20,9 @@ function extParseJournal_(text){
   guests:people?Number(people[1]):null,payments,warnings:['読取候補です。原本と照合してから売上フォームへ反映してください。日計のみのため時間帯別の値は補いません。']};
 }
 function extParseInvoice_(text,supplier){
- const compact=text.replace(/[ \t]+/g,' '),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
+ const detected=[['キタニ水産',/キタニ水産/],['maruyasu',/maruyasu|丸安商店/i],['プレコフーズ',/プレコ|PRECO/i],['西原',/西原商会/],['カクヤス',/カクヤス/]].filter(([,pattern])=>pattern.test(text));
+ if(detected.length===1)supplier=detected[0][0];
+ const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
  const first=dates[0],date=first?(first[1].length===2?'20':'')+first[1]+'-'+first[2].padStart(2,'0')+'-'+first[3].padStart(2,'0'):'';
  let total=extLabelNumber_(compact,'合計金額')??extLabelNumber_(compact,'差引合計')??extLabelNumber_(compact,'合計');
  let invoiceNumber='',tax=null,taxMode='monthly',type=/容器回収票/.test(compact)?'return':'delivery';
@@ -70,17 +72,46 @@ function archiveExtensionDocument(input){return locked_(()=>{
  const value={id,month,name,mime,driveId:file.getId(),url:file.getUrl(),hash};
  return extWrite_('file',id,0,{opId:'file_'+id,hash},value).value;
  });}
+
+function extOcrResult_(text,kind,supplier,file,cached,started){
+ return {text,draft:kind==='journal'?extParseJournal_(text):extParseInvoice_(text,supplier),
+  source:{id:file.id,url:file.url,name:file.name},timings:{ocrMs:Date.now()-started,cached}};
+}
 function readExtensionOcr(input){
- const state=locked_(()=>extState_()),file=state.file[extText_(input.fileId,100)];
+ const started=Date.now(),state=locked_(()=>extState_()),file=state.file[extText_(input.fileId,100)];
  if(!file)throw Error('先に原本を保存してください');
  const kind=input.kind==='journal'?'journal':'invoice',supplier=extText_(input.supplier,100);
- let temporaryId='',text='';
+ const raw=DriveApp.getFileById(file.driveId),parents=raw.getParents();
+ if(!parents.hasNext())throw Error('原本の保存先が見つかりません');
+ const folder=parents.next(),cacheName='ocr_v2_'+(file.hash||file.id)+'.txt',cachedFiles=folder.getFilesByName(cacheName);
+ if(!input.force&&cachedFiles.hasNext()){
+  const text=cachedFiles.next().getBlob().getDataAsString('UTF-8');
+  if(text.length<=50000)return extOcrResult_(text,kind,supplier,file,true,started);
+ }
+ let temporaryId='',text='',failure=null;
  try{
-  const doc=Drive.Files.create({name:'一時OCR_'+file.id,mimeType:'application/vnd.google-apps.document'},DriveApp.getFileById(file.driveId).getBlob(),{ocrLanguage:'ja',fields:'id'});
+  const doc=Drive.Files.create({name:'一時OCR_'+file.id,mimeType:'application/vnd.google-apps.document'},raw.getBlob(),{ocrLanguage:'ja',fields:'id'});
   temporaryId=doc.id;text=DocumentApp.openById(temporaryId).getBody().getText();
- }finally{if(temporaryId)Drive.Files.update({trashed:true},temporaryId);}
+ }catch(error){failure=error;}
+ finally{if(temporaryId){try{Drive.Files.update({trashed:true},temporaryId);}catch(error){if(!failure)failure=error;else console.error('OCR一時ファイル後片付け失敗 '+temporaryId);}}}
+ if(failure)throw failure;
  if(text.length>50000)throw Error('OCR結果が長すぎます。ページを分けてください');
- return {text,draft:kind==='journal'?extParseJournal_(text):extParseInvoice_(text,supplier),source:{id:file.id,url:file.url}};
+ if(!text.trim())throw Error('文字を読み取れませんでした。写真の向き・明るさを確認するか手入力してください');
+ // Cache raw text only; supplier-specific interpretation is recomputed on each request.
+ try{if(!folder.getFilesByName(cacheName).hasNext())folder.createFile(cacheName,text,MimeType.PLAIN_TEXT);}catch(error){console.warn('OCR結果キャッシュ保存失敗');}
+ return extOcrResult_(text,kind,supplier,file,false,started);
+}
+function processExtensionReceipt(input){
+ const started=Date.now();let source=null,stage='原本保存';
+ try{
+  source=archiveExtensionDocument(input);stage='OCR';
+  const result=readExtensionOcr({fileId:source.id,kind:input.kind,supplier:input.supplier,force:input.force===true});
+  return {ok:true,...result,timings:{...result.timings,totalMs:Date.now()-started}};
+ }catch(error){
+  const message=error&&error.message||String(error||'処理結果を取得できませんでした');
+  console.error(JSON.stringify({stage,message,fileId:source&&source.id}));
+  return {ok:false,stage,error:message,source:source?{id:source.id,url:source.url,name:source.name}:null};
+ }
 }
 
 /** Receives diagnostic messages only. Never accepts photo data, OCR text, tokens or financial records. */

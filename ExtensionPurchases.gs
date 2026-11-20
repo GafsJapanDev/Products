@@ -137,3 +137,18 @@ function extProjectMonthly_(state){
   extTable_(book,EXT_SCHEMA.inventory,['対象月','基準日','版','状態','再確認','実施者','確認者','確認依頼日時','確定日時','品目ID','仕入先','品名','数量','単位','税込単価','棚卸金額','連続ゼロ月数','単価採用元'],data);
  });
 }
+
+/** Independent transactions: one failed invoice cannot roll back other saved invoices. */
+function saveExtensionReceiptBatch(input){
+ extEnvironment_();
+ if(!input||!Array.isArray(input.records)||!input.records.length||input.records.length>20)throw Error('一度の保存は1〜20伝票です');
+ const ids=new Set();
+ input.records.forEach(r=>{if(ids.has(r.id))throw Error('保存する伝票IDが重複しています');ids.add(r.id);});
+ return {results:input.records.map(record=>{
+  try{
+   const result=saveExtensionInvoice(record);
+   if(result.needsDuplicateConfirmation)return {id:record.id,status:'duplicate',candidates:result.candidates};
+   return {id:record.id,status:'saved',invoice:result.invoice};
+  }catch(error){return {id:record.id,status:'failed',error:error&&error.message||String(error||'保存に失敗しました')};}
+ })};
+}

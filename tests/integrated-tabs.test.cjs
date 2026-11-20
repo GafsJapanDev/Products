@@ -6,7 +6,7 @@ class Element{
  constructor(tag='div'){this.tag=tag;this.children=[];this.dataset={};this.value='';this.hidden=false;this.attributes={};this.classList={toggle(){}};this.style={};this.parentElement=null;}
  append(...elements){elements.forEach(e=>{if(typeof e==='string')return;if(e.parentElement)e.parentElement.children=e.parentElement.children.filter(x=>x!==e);e.parentElement=this;this.children.push(e);});}
  replaceChildren(...elements){this.children.forEach(e=>e.parentElement=null);this.children=[];this.append(...elements);}
- setAttribute(k,v){this.attributes[k]=v;}scrollIntoView(){}
+ setAttribute(k,v){this.attributes[k]=v;}removeAttribute(k){delete this.attributes[k];}addEventListener(){}scrollIntoView(){}showModal(){this.open=true;}close(){this.open=false;}remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(e=>e!==this);}
  querySelectorAll(selector){const all=this.children.flatMap(e=>[e,...e.querySelectorAll('*')]);if(selector==='*')return all;
  if(selector==='[data-key]')return all.filter(e=>e.dataset.key);return all.filter(e=>e.tag===selector);}
 }
@@ -20,7 +20,7 @@ const sandbox={window:{addEventListener(){}},console,crypto,structuredClone,$:el
  render(){sections.forEach(e=>e.hidden=e!==el(sandbox.tab));},capture(){},current(){return {date:sandbox.activeDate};},
  save(){calls.push('legacySave');},setBusy:v=>{sandbox.busy=v;},showStatus:(...v)=>calls.push(v),confirm:()=>true,
  rpc:async(name,arg)=>{calls.push({name,arg});return name==='extensionContext'?structuredClone(context):{};},
- row(){},totals(){},PAY:[],tab:'売上',activeDate:'2026-11-20',day:{},busy:false};
+ row(){},totals(){},PAY:['現金','クレジット'],tab:'売上',activeDate:'2026-11-20',day:{},busy:false};
 vm.createContext(sandbox);vm.runInContext(script,sandbox);
 const run=s=>vm.runInContext(s,sandbox);
 async function main(){
@@ -37,22 +37,48 @@ async function main(){
  el('extSupplier').value='キタニ水産';el('extTotal').value='5079';
  sandbox.capture();sandbox.tab='売上';sandbox.render();sandbox.tab='仕入';sandbox.render();await Promise.resolve();
  assert.equal(el('extTotal').value,'5079');
- // Apply the actual OCR callback: keep the supplier object and remain in the purchase tab.
- el('extOcrConfirmed').checked=true;
- run("extOcrDraft={kind:'invoice',date:'2026-11-20',supplier:'キタニ水産',printedTotal:5079,lines:[]};extOcrFiles=[{id:'raw-one',url:'https://drive.google.com/file/d/raw/view',name:'original.pdf'}];");
- el('extApplyOcr').onclick();await Promise.resolve();
- assert.equal(sandbox.tab,'仕入');assert.equal(el('extSupplier').value,'キタニ水産');assert.equal(el('extTotal').value,5079);
- assert.equal(run('extInvoice.files[0].id'),'raw-one');assert.equal(el('extOcrPanel').hidden,true);
- let invoiceSaves=0;sandbox.extSaveInvoice=async()=>invoiceSaves++;
- await sandbox.save();assert.equal(invoiceSaves,1);assert.equal(calls.filter(x=>x==='legacySave').length,0);
- run("extPurchaseMode='simple';");await sandbox.save();assert.equal(calls.filter(x=>x==='legacySave').length,1);
- sandbox.tab='売上';sandbox.render();run("extOcrDraft={kind:'journal',date:'2026-11-20',tax:354,groups:1,guests:1,total:3900,payments:[]};extOcrFiles=[{id:'journal-one'}];");
- el('extOcrConfirmed').checked=true;el('extApplyOcr').onclick();
- assert.equal(sandbox.tab,'売上');assert.equal(el('tax').value,354);assert.equal(el('guests').value,1);
- assert.equal(sandbox.current().journalFiles[0],'journal-one');
- // Crossing dates must discard an old OCR candidate, never apply it to another day.
- run("extOcrDate='2026-11-20';");sandbox.activeDate='2026-11-21';sandbox.render();
- assert.equal(run('extOcrDraft'),null);
- console.log('Integrated tabs: mount, routing, draft preservation, OCR application and date isolation passed');
+
+ // Different dates remain independent; the modal renders editable table rows.
+ run("extReceiptQueue.push({id:'receipt_oct',kind:'invoice',status:'ready',uploads:[{file:{name:'oct.jpg'}}],sources:[{id:'raw_oct',url:'https://drive.google.com/file/d/oct/view'}],texts:['原文'],draft:{kind:'invoice',date:'2026-10-31',supplier:'キタニ水産',printedTotal:100,type:'delivery',taxMode:'gross',tax:null,lines:[],warnings:[]}});");
+ run("extOpenReceiptReview('receipt_oct')");
+ assert.equal(el('extReceiptDialog').open,true);assert.equal(el('extReviewDate').value,'2026-10-31');
+ assert.equal(el('extReviewHead').children[0].children[0].textContent,'品名');
+ await el('extReviewConfirm').onclick();
+ assert.equal(run("extReceiptQueue[0].status"),'confirmed');
+ run("extReceiptQueue.push({id:'receipt_nov',kind:'invoice',status:'confirmed',uploads:[{file:{name:'nov.jpg'}}],sources:[{id:'raw_nov'}],texts:[],draft:{kind:'invoice',date:'2026-11-02',supplier:'西原',printedTotal:200,type:'delivery',taxMode:'gross',tax:null,adjustment:0,reason:'',lines:[],warnings:[]}})");
+ const requests=[];let attempts=0;
+ sandbox.rpc=async(name,arg)=>{
+  if(name==='saveExtensionReceiptBatch'){
+   requests.push(structuredClone(arg));attempts++;
+   return {results:arg.records.map((r,i)=>attempts===1&&i===1?{id:r.id,status:'failed',error:'一時エラー'}:{id:r.id,status:'saved',invoice:{...r,version:1}})};
+  }
+  return name==='extensionContext'?structuredClone(context):{};
+ };
+ await el('extSaveBatch').onclick();
+ assert.equal(requests[0].records[0].date,'2026-10-31');assert.equal(requests[0].records[1].date,'2026-11-02');
+ assert.equal(run('extReceiptQueue[0].status'),'saved');assert.equal(run('extReceiptQueue[1].status'),'saveFailed');
+ const retryToken=requests[0].records[1].opId;
+ await el('extSaveBatch').onclick();assert.equal(requests[1].records.length,1);
+ assert.equal(requests[1].records[0].opId,retryToken);assert.equal(run('extReceiptQueue[1].status'),'saved');
+ // Grouping is explicit and never sums all printed totals.
+ const page=(id,total,date='2026-10-31')=>({id,kind:'invoice',uploads:[],sources:[],texts:[],draft:{date,supplier:'maruyasu',printedTotal:total,tax:null,invoiceNumber:'001',lines:[],warnings:[]}});
+ const grouped=sandbox.extMergeReceiptModels([page('p1',null),page('p2',2640)],'grouped');
+ assert.equal(grouped.draft.printedTotal,2640);
+ const ambiguous=sandbox.extMergeReceiptModels([page('p1',100),page('p2',200,'2026-11-01')],'ambiguous');
+ assert.equal(ambiguous.draft.printedTotal,null);assert.equal(ambiguous.draft.date,'');
+ // Pool starts at most two jobs and makes progress while another job is unfinished.
+ let active=0,max=0,done=0;const releases=[];
+ const pool=sandbox.extReceiptPool([1,2,3],()=>new Promise(resolve=>{active++;max=Math.max(max,active);releases.push(()=>{active--;done++;resolve();});}));
+ assert.equal(active,2);releases[1]();for(let i=0;i<10;i++)await Promise.resolve();
+ assert.equal(done,1);assert.equal(releases.length,3);assert.equal(active,2);
+ releases[0]();releases[2]();await pool;assert.equal(max,2);assert.equal(done,3);
+ // Journal confirmation writes to the existing form and retains the source link.
+ sandbox.tab='売上';sandbox.render();
+ run("extReceiptQueue.push({id:'journal_one',kind:'journal',status:'ready',uploads:[],sources:[{id:'raw_journal'}],texts:[],draft:{date:'2026-11-20',total:3900,tax:354,groups:1,guests:1,payments:[{name:'現金',amount:3900}],warnings:[]}});extOpenReceiptReview('journal_one');");
+ await el('extReviewConfirm').onclick();
+ assert.equal(el('tax').value,354);assert.equal(el('guests').value,1);assert.equal(sandbox.current().journalFiles[0],'raw_journal');
+ assert.equal(run("extReceiptQueue.find(r=>r.id==='journal_one').status"),'applied');
+
+ console.log('Batch UI: table modal, cross-month dates, partial saves, retry IDs, manual grouping, bounded parallelism and journal reflection passed');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

@@ -13,11 +13,11 @@ function harness(){
  const book={getSheetByName:n=>sheets.get(n),insertSheet:n=>{const s=new Sheet();sheets.set(n,s);return s;}};
  book.insertSheet('変更履歴').appendRow(['op','kind','id','version','at','hash','json']);
  let fetches=0;
- const ctx=vm.createContext({console,Date,JSON,Math,Set,Map,Number,String,Object,Array,Error,
+ const ctx=vm.createContext({console,Date,JSON,Math,Set,Map,Number,String,Object,Array,Error,MimeType:{PLAIN_TEXT:'text/plain'},
   Utilities:{DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_,s)=>[...crypto.createHash('sha256').update(s).digest()],getUuid:()=>crypto.randomUUID(),
    formatDate:(d,tz,pattern)=>{const text=new Date(d.getTime()+9*3600000).toISOString();return pattern==='yyyy-MM'?text.slice(0,7):text.slice(0,10);}},
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k],getProperties:()=>({...props})})},
-  DriveApp:{getFileById:()=>({getParents:()=>{let used=false;return {hasNext:()=>!used,next:()=>{used=true;return {getId:()=> 'root'};}};},getBlob:()=>({})})},
+  DriveApp:{getFileById:()=>({getParents:()=>{let used=false;return {hasNext:()=>!used,next:()=>{used=true;return {getId:()=> 'root',getFilesByName:()=>({hasNext:()=>false}),createFile(){}};}};},getBlob:()=>({})})},
   SpreadsheetApp:{flush:()=>{},openById:()=>book},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   UrlFetchApp:{fetch:()=>{fetches++;throw Error('offline');}}
  });
@@ -149,5 +149,29 @@ test('explicit periods are applied and historical simple entries are included on
  const result=c.queryExtensionData({name:'monthlyTotals',args:{supplier:'キタニ水産',start:'2026-10-01',end:'2026-10-31'},asOf:'2026-11-19'});
  assert.equal(result.rows.length,1);assert.equal(result.rows[0].total,500);
 });
+
+test('batch saves isolate failure and reuse stable operation IDs across months',()=>{
+ const c=harness(),oct=invoiceInput(c,{date:'2026-10-31'}),nov=invoiceInput(c,{date:'2026-11-02',supplier:''});
+ let result=c.saveExtensionReceiptBatch({records:[oct,nov]});
+ assert.equal(result.results[0].status,'saved');assert.equal(result.results[1].status,'failed');
+ result=c.saveExtensionReceiptBatch({records:[oct,{...nov,supplier:'西原'}]});
+ assert.equal(result.results[0].status,'saved');assert.equal(result.results[1].status,'saved');
+ const values=Object.values(c.extState_().invoice);assert.equal(values.length,2);
+ assert.equal(values.find(i=>i.id===oct.id).date,'2026-10-31');assert.equal(values.find(i=>i.id===nov.id).date,'2026-11-02');
+});
+test('OCR text cache skips Drive conversion and reinterprets results per kind',()=>{
+ const c=harness(),cache=new Map();
+ c.extWrite_('file','cached-file',0,{opId:'cache-file-op'},{id:'cached-file',hash:'content-hash',driveId:'drive-file',url:'https://drive.google.com/file/d/x/view'});
+ const folder={getId:()=> 'root',getFilesByName:name=>({hasNext:()=>cache.has(name),next:()=>({getBlob:()=>({getDataAsString:()=>cache.get(name)})})}),createFile:(name,text)=>cache.set(name,text)};
+ c.DriveApp.getFileById=()=>({getBlob:()=>({}),getParents:()=>{let used=false;return {hasNext:()=>!used,next:()=>{used=true;return folder;}};}});
+ let conversions=0,trashed=0;
+ c.Drive={Files:{create:()=>{conversions++;return {id:'temp'};},update:()=>trashed++}};
+ c.DocumentApp={openById:()=>({getBody:()=>({getText:()=> '総売上 0円'})})};
+ assert.equal(c.readExtensionOcr({fileId:'cached-file',kind:'journal'}).timings.cached,false);
+ assert.equal(c.readExtensionOcr({fileId:'cached-file',kind:'invoice',supplier:'西原'}).timings.cached,true);
+ assert.equal(conversions,1);assert.equal(trashed,1);
+ c.readExtensionOcr({fileId:'cached-file',kind:'journal',force:true});assert.equal(conversions,2);assert.equal(trashed,2);
+});
 console.log(passed+' tests passed');
+
 
