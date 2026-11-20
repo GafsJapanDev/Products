@@ -6,10 +6,10 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 .ext-scroll{overflow:auto}.ext-table{border-collapse:collapse;width:100%;font-size:14px}.ext-table td,.ext-table th{padding:10px;border-bottom:1px solid var(--line);text-align:left}
 .ext-table input{min-width:95px}#extOcrText{width:100%;min-height:130px}.ext-warning{color:#a41420;white-space:pre-line}.ext-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .ext-check input{width:auto;min-height:24px}.ext-badge{background:#fff0cb;padding:10px;font-weight:bold}.ext-hidden[hidden]{display:none}
-</style>
+.save-actions[hidden],#extInvoicePanel[hidden],#extSimplePurchase[hidden],#extOcrPanel[hidden]{display:none}.ext-input-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ext-input-actions button[aria-pressed="true"]{background:#e2eee6;font-weight:700}</style>
 <div class="ext-badge">拡張テスト版 ／ LINE送信停止中</div>
-<section id="納品伝票" hidden>
- <div class="card"><h2>納品伝票を記録</h2>
+<div id="extInvoicePanel" hidden>
+ <div class="card"><h2>仕入れ内容を確認</h2>
  <div class="ext-grid"><label>仕入先<input id="extSupplier" list="extSuppliers"></label><label>伝票番号<input id="extInvoiceNumber"></label></div>
  <label>入力方法<select id="extLegacy"><option value="">新しい伝票</option></select></label>
  <div class="ext-grid"><label>種類<select id="extType"><option value="delivery">納品</option><option value="return">容器回収・返金</option></select></label><label>税区分<select id="extTaxMode"><option value="gross">税込</option><option value="net">税別・税額あり</option><option value="monthly">税別・月末加算</option></select></label></div>
@@ -18,7 +18,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <div id="extLines"></div><button type="button" id="extAddLine">＋ 品目を追加</button>
  <label>差額・調整の理由<textarea id="extReason"></textarea></label>
  <p id="extInvoiceFiles"></p>
- <div class="ext-actions"><button id="extSaveInvoice">伝票を保存</button><button id="extNewInvoice">新しい伝票</button><button id="extCancelInvoice">この伝票を取消</button></div>
+ <div class="ext-actions"><button id="extNewInvoice">新しい伝票</button><button id="extCancelInvoice">この伝票を取消</button></div>
  </div>
  <div class="card"><h3>この日の伝票</h3><div id="extInvoiceList"></div></div>
  <div class="card"><h3>月末の税額</h3><p class="hint">月末加算の伝票分のみ。食材・飲料・雑費を分けて入力します。</p>
@@ -26,10 +26,10 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <div class="ext-grid"><label>食材税額<input id="extFoodTax" type="number" min="0"></label><label>飲料税額<input id="extDrinkTax" type="number" min="0"></label></div>
  <label>雑費税額<input id="extMiscTax" type="number" min="0"></label><label>備考<input id="extTaxNote"></label><button id="extSaveTax">月末税額を保存</button>
  </div>
-</section>
-<section id="帳票読取" hidden><div class="card"><h2>帳票を読み取る</h2>
- <label>帳票<select id="extOcrKind"><option value="invoice">納品伝票</option><option value="journal">売上ジャーナル</option></select></label>
- <label>仕入先<input id="extOcrSupplier" list="extSuppliers"></label>
+</div>
+<div id="extOcrPanel" hidden><div class="card"><button id="extCloseOcr" type="button">読み取りを閉じる</button>
+ <h3 id="extOcrHeading">帳票の読み取り</h3><input id="extOcrKind" type="hidden" value="invoice">
+ <label id="extOcrSupplierLabel">仕入先<input id="extOcrSupplier" list="extSuppliers"></label>
  <label>写真・PDFを追加<input id="extUpload" type="file" accept="image/jpeg,image/png,application/pdf" multiple></label>
  <p class="hint">原本をDriveに保存してから読み取ります。複数枚は同じ伝票にまとめられます。</p>
  <button id="extReadOcr">保存して読み取る</button><p id="extOcrWarning" class="ext-warning"></p>
@@ -37,7 +37,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <label>読取候補（反映後のフォームで修正できます）<textarea id="extOcrDraft" rows="8" readonly></textarea></label>
  <label class="ext-check"><input id="extOcrConfirmed" type="checkbox">原本と読み取り内容を確認した</label>
  <button id="extApplyOcr">入力フォームへ反映</button>
- </div></section>
+ </div></div>
 <section id="棚卸" hidden><div class="card"><h2>月末棚卸</h2>
  <label>対象月<input id="extStockMonth" type="month"></label><button id="extLoadStock">一覧を表示</button>
  <p id="extStockState"></p><div class="ext-grid"><label>実施者<select id="extImplementer"><option value="">選択</option><option>高杉</option><option>荒川</option></select></label><label>確認者<select id="extReviewer"><option value="">選択</option><option>高杉</option><option>荒川</option></select></label></div>
