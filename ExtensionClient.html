@@ -50,12 +50,32 @@ render=function(){
  if(tab==='仕入')extSyncPurchaseMode();
  if(tab!=='小口'&&tab!=='入金')extLoadContext().catch(e=>showStatus(e.message,'error'));
 };
+
+let extFailureStage='';
+function extErrorText(error){
+ if(typeof error==='string'&&error.trim())return error;
+ if(error&&typeof error.message==='string'&&error.message.trim())return error.message;
+ if(error&&typeof error.error==='string'&&error.error.trim())return error.error;
+ try{const json=JSON.stringify(error);if(json&&json!=='{}'&&json!=='null')return json.slice(0,1200);}catch(_){}
+ return 'エラー詳細を取得できませんでした。Apps Scriptの画面エラーログを確認してください';
+}
+function extLogClientError(error,stage){
+ const message=extErrorText(error);
+ console.error('[店舗日報] '+stage+': '+message,error);
+ if(window.google&&google.script){
+  try{google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>console.error('エラーログ送信失敗',e))
+   .reportExtensionClientError({stage:String(stage||'画面処理').slice(0,150),message:message.slice(0,1200)});
+  }catch(logError){console.error('エラーログ送信失敗',logError);}
+ }
+ return message;
+}
 async function extRun(fn){
- if(busy)return;setBusy(true);showStatus('処理中…');
+ if(busy)return;extFailureStage='画面処理';setBusy(true);showStatus('処理中…');
  try{await fn();showStatus('処理が完了しました','success');}
- catch(e){showStatus(e.message,'error');}
+ catch(e){showStatus(extFailureStage+'：'+extLogClientError(e,extFailureStage),'error');}
  finally{setBusy(false);document.querySelector('.save-actions').hidden=extTabs.includes(tab);}
 }
+
 function extResetOcr(){
  extOcrDraft=null;extOcrFiles=[];extUploadCache=[];extOcrDate='';
  $('extUpload').value='';$('extOcrConfirmed').checked=false;
@@ -172,15 +192,24 @@ document.querySelectorAll('[data-stock]').forEach(b=>b.onclick=()=>extRun(async(
 $('extUpload').onchange=()=>{extUploadCache=[];extOcrFiles=[];$('extOcrConfirmed').checked=false;};
 async function extReadFile(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=()=>reject(Error('ファイルを読めません'));r.readAsDataURL(file);});}
 $('extReadOcr').onclick=()=>extRun(async()=>{
- const files=[...$('extUpload').files];if(extVal('extOcrKind')==='journal'&&files.length>1)throw Error('ジャーナルは1枚ずつ読み取ってください');if(!files.length)throw Error('写真・PDFを選択してください');
+ extFailureStage='添付ファイルの確認';const files=[...$('extUpload').files];if(extVal('extOcrKind')==='journal'&&files.length>1)throw Error('ジャーナルは1枚ずつ読み取ってください');if(!files.length)throw Error('写真・PDFを選択してください');
  if(!extUploadCache.length)extUploadCache=files.map(f=>({file:f,id:crypto.randomUUID()}));
- extOcrFiles=[];const results=[];
+ extOcrFiles=[];const results=[];let page=0;
  for(const entry of extUploadCache){
-  const source=await rpc('archiveExtensionDocument',{id:entry.id,month:activeDate.slice(0,7),name:entry.file.name,mime:entry.file.type,base64:await extReadFile(entry.file)});
+  page++;extFailureStage=page+'枚目：写真・PDFの読み込み';showStatus(extFailureStage+'…');
+  const base64=await extReadFile(entry.file);
+  extFailureStage=page+'枚目：Driveへの原本保存';showStatus(extFailureStage+'…');
+  const source=await rpc('archiveExtensionDocument',{id:entry.id,month:activeDate.slice(0,7),name:entry.file.name,mime:entry.file.type,base64});
+  if(!source||typeof source.id!=='string')throw Error('原本保存の結果が空です。新しいバージョンでデプロイされているか確認してください');
   extOcrFiles.push(source);
-  results.push(await rpc('readExtensionOcr',{fileId:source.id,kind:extVal('extOcrKind'),supplier:extVal('extOcrSupplier')}));
+  extFailureStage=page+'枚目：OCR実行';showStatus(extFailureStage+'…');
+  const result=await rpc('readExtensionOcr',{fileId:source.id,kind:extVal('extOcrKind'),supplier:extVal('extOcrSupplier')});
+  extFailureStage=page+'枚目：OCR結果の受信・確認';
+  if(!result||typeof result.text!=='string'||!result.draft||!Array.isArray(result.draft.warnings))throw Error('OCRの返却結果が空または不正です。GASとHTMLが同じバージョンか確認してください');
+  if(result.draft.kind==='invoice'&&!Array.isArray(result.draft.lines))throw Error('OCRの明細結果が不正です');
+  results.push(result);
  }
- const draft=results[0].draft;
+ extFailureStage='読み取り結果の画面表示';const draft=results[0].draft;
  if(draft.kind==='invoice'){
   draft.lines=results.flatMap(r=>r.draft.lines);
   const totals=results.map(r=>r.draft.printedTotal).filter(v=>v!==null);
@@ -207,7 +236,7 @@ $('extApplyOcr').onclick=()=>{
    capture();tab='仕入';extPurchaseMode='invoice';extEditInvoice({id:crypto.randomUUID(),version:0,...d,date:activeDate,supplier:{name:d.supplier},lines:d.lines||[],files:extOcrFiles});render();
    $('extOcrPanel').hidden=true;showStatus('仕入れの入力欄に反映しました。内容を確認して「仕入れを保存」を押してください','warning');
   }
- }catch(e){showStatus(e.message,'error');}
+ }catch(e){showStatus('入力フォームへの反映：'+extLogClientError(e,'入力フォームへの反映'),'error');}
 };
 function extDisplayResults(results){
  $('extAnswer').replaceChildren();
@@ -242,5 +271,14 @@ $('extQuery').onclick=()=>extRun(async()=>{const result=await rpc('queryExtensio
  const b=document.createElement('button');b.textContent=q;b.onclick=()=>extSet('extQuestion',q);$('extExamples').append(b);
 });
 extTabs.forEach(t=>{const b=document.createElement('button');b.dataset.tab=t;b.textContent=t==='AI'?'AIアシスタント':t;b.onclick=()=>{capture();tab=t;render();};document.querySelector('nav').append(b);});
+
+window.addEventListener('error',event=>{
+ const message=extLogClientError(event.error||event.message,'画面JavaScript');
+ showStatus('画面処理：'+message,'error');
+});
+window.addEventListener('unhandledrejection',event=>{
+ const message=extLogClientError(event.reason,'非同期の画面処理');
+ showStatus('画面処理：'+message,'error');
+});
 $('salesSendLine').checked=false;$('depositSendLine').checked=false;
 </script>

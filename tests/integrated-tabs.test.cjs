@@ -14,7 +14,7 @@ const elements={},el=id=>elements[id]||(elements[id]=new Element()),nav=new Elem
 const sections=['売上','仕入','小口','入金','棚卸','AI'].map(id=>el(id));
 const calls=[];
 const context={suppliers:['キタニ水産'],products:[],invoices:[],legacy:[],taxes:[]};
-const sandbox={console,crypto,structuredClone,$:el,document:{getElementById:el,createElement:t=>new Element(t),
+const sandbox={window:{addEventListener(){}},console,crypto,structuredClone,$:el,document:{getElementById:el,createElement:t=>new Element(t),
  querySelector:s=>s==='nav'?nav:actions,
  querySelectorAll:s=>s==='section'?sections:s==='nav button'?nav.children:[]},
  render(){sections.forEach(e=>e.hidden=e!==el(sandbox.tab));},capture(){},current(){return {date:sandbox.activeDate};},

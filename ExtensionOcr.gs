@@ -82,3 +82,11 @@ function readExtensionOcr(input){
  if(text.length>50000)throw Error('OCR結果が長すぎます。ページを分けてください');
  return {text,draft:kind==='journal'?extParseJournal_(text):extParseInvoice_(text,supplier),source:{id:file.id,url:file.url}};
 }
+
+/** Receives diagnostic messages only. Never accepts photo data, OCR text, tokens or financial records. */
+function reportExtensionClientError(input){
+ extEnvironment_();
+ const stage=extText_(input&&input.stage,150),message=extText_(input&&input.message,1200);
+ console.error('[画面エラー] '+JSON.stringify({stage,message,at:new Date().toISOString()}));
+ return {logged:true};
+}
