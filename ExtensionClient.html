@@ -422,12 +422,85 @@ async function extReadReceiptEntries(entries){
 }
 $('extInvoiceOcrEngine').onchange=extRenderReceiptQueue;
 $('extUpload').onchange=()=>{extUploadCache=[];$('extCaptureStatus').textContent='';};
-$('extOpenCamera').onclick=()=>{
- if(!extReceiptReading)$('extCamera').click();
+let extCameraSession=0;
+function extStopCamera(){
+ extCameraSession++;
+ const video=$('extCameraVideo');
+ video.srcObject?.getTracks().forEach(track=>track.stop());
+ video.srcObject=null;
+}
+function extShowCameraPhoto(preview){
+ $('extCameraVideo').hidden=preview;
+ $('extCameraOverlay').hidden=preview;
+ $('extCameraPhoto').hidden=!preview;
+ $('extTakePhoto').hidden=preview;
+ $('extUsePhoto').hidden=!preview;
+ $('extRetakePhoto').hidden=!preview;
+}
+function extCloseCamera(){
+ extStopCamera();
+ $('extCameraDialog').close();
+}
+$('extOpenCamera').onclick=async()=>{
+ const dialog=$('extCameraDialog'),video=$('extCameraVideo'),message=$('extCameraMessage');
+ if(extReceiptReading||dialog.open)return;
+ const session=++extCameraSession;
+ extShowCameraPhoto(false);
+ $('extTakePhoto').disabled=true;
+ message.textContent='カメラを準備しています。許可を求められたらカメラの使用を許可してください。';
+ dialog.showModal();
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({
+   audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1440}}
+  });
+  if(session!==extCameraSession){stream.getTracks().forEach(track=>track.stop());return;}
+  video.srcObject=stream;
+  await video.play();
+  if(session!==extCameraSession)return;
+  $('extTakePhoto').disabled=false;
+  message.textContent='伝票全体と合計欄が入ったら「撮影」を押してください。';
+ }catch(error){
+  if(session!==extCameraSession)return;
+  extStopCamera();
+  message.textContent='この画面でカメラを開けません。「標準カメラで撮る」か、撮影済みの写真を選んでください。';
+ }
 };
+$('extTakePhoto').onclick=()=>{
+ const video=$('extCameraVideo'),canvas=$('extCameraPhoto');
+ if(!video.videoWidth)return;
+ canvas.width=video.videoWidth;
+ canvas.height=video.videoHeight;
+ canvas.getContext('2d').drawImage(video,0,0);
+ extShowCameraPhoto(true);
+ $('extCameraMessage').textContent='文字が読めることを確認してください。';
+};
+$('extRetakePhoto').onclick=()=>{
+ extShowCameraPhoto(false);
+ $('extCameraMessage').textContent='伝票全体と合計欄が入ったら「撮影」を押してください。';
+};
+$('extUsePhoto').onclick=()=>{
+ const button=$('extUsePhoto'),session=extCameraSession;
+ button.disabled=true;
+ $('extCameraPhoto').toBlob(blob=>{
+  button.disabled=false;
+  if(session!==extCameraSession)return;
+  if(blob&&extAppendCameraPhoto(new File([blob],'伝票-'+Date.now()+'.jpg',{type:'image/jpeg'}))){
+   extCloseCamera();
+  }else{
+   $('extCameraMessage').textContent=blob?$('extCaptureStatus').textContent:'写真を作成できませんでした。撮り直してください。';
+  }
+ },'image/jpeg',0.92);
+};
+$('extNativeCamera').onclick=()=>{extCloseCamera();$('extCamera').click();};
+$('extCloseCamera').onclick=extCloseCamera;
+$('extCameraDialog').addEventListener('cancel',event=>{event.preventDefault();extCloseCamera();});
+window.addEventListener('pagehide',extStopCamera);
 $('extCamera').onchange=()=>{
  const camera=$('extCamera'),file=camera.files[0];
- if(!file)return;
+ if(file)extAppendCameraPhoto(file);
+ camera.value='';
+};
+function extAppendCameraPhoto(file){
  const upload=$('extUpload'),status=$('extCaptureStatus');
  try{
   if(extReceiptReading)throw Error('読み取りが終わってから写真を追加してください');
@@ -439,9 +512,9 @@ $('extCamera').onchange=()=>{
   upload.files=files.files;
   if(extUploadCache.length)extUploadCache.push({id:crypto.randomUUID(),file});
   status.textContent='写真を追加しました（合計 '+upload.files.length+'件）。続けて撮影するか、「保存して読み取る」を押してください。';
- }catch(error){status.textContent=error.message||'写真を追加できません。「ファイル選択」から追加してください';}
- finally{camera.value='';}
-};
+  return true;
+ }catch(error){status.textContent=error.message||'写真を追加できません。「ファイル選択」から追加してください';return false;}
+}
 $('extReadOcr').onclick=async()=>{
  if(extReceiptReading||busy)return;
  try{
