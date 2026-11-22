@@ -202,6 +202,18 @@ test('Kakuyasu reread accepts an observed quantity only when it matches the row 
  assert.equal(read('3').draft.printedTotal,null);
 });
 
+test('wrapped Kakuyasu OCR keeps partial items without inferring quantities or totals',()=>{
+ const c=harness(),text='カクヤス';
+ const items='33-33-33-33 テス トビ 500ML\nー ル hik\n98 外 10% 286 858\n摘要';
+ const parse=items=>c.extParseInvoice_(text,'',text,{items,totals:'容器 数量 金額 | 858'});
+ const draft=parse(items);
+ assert.equal(draft.lines.length,1);
+ assert.deepEqual([draft.lines[0].qty,draft.lines[0].price,draft.lines[0].amount],[null,286,858]);
+ assert.equal(draft.printedTotal,null);
+ assert.equal(draft.requiresQuantityReview,true);
+ assert.equal(parse(items.replace('ー ル hik','摘要')).lines.length,0);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

@@ -104,6 +104,10 @@ function extParseInvoice_(text,supplier,rowText,crops){
    }
   }
  }
+ if(!lines.length&&crops&&supplier==='カクヤス'&&type==='delivery'){
+  lines.push(...extParseKakuyasuWrappedRows_(crops.items));
+  requiresQuantityReview=lines.length>0;
+ }
  return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,requiresQuantityReview,
   warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(requiresQuantityReview?['明細候補の空欄は原本を見て補ってください。']:[]),...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
 }
@@ -147,6 +151,28 @@ function extParseKakuyasuCrop_(text){
   const unit=/缶/.test(name)?'缶':/瓶|ペ[ \t]*ッ[ \t]*ト/.test(name)?'本':'';
   return [{name,sku:'',qty:valid[0],unit,price,amount,rate:Number(rate),category:'飲料',reason:''}];
  });
+}
+
+function extParseKakuyasuWrappedRows_(text){
+ const rows=text.normalize('NFKC').split(/\r?\n/).map(row=>row.replace(/[|│]/g,' ').trim());
+ const start=/^(\d{2}(?:-\d{2}){3})\s+(.+?)\s+\d+(?:\.\d+)?\s*(?:ML|L)$/i;
+ const numericTail=/^(?:\d{1,6}[ \t]+)?外[ \t]*(8|10)[ \t]*%[ \t]+([\d,]+)[ \t]+([\d,]+)$/;
+ const result=[];
+ for(let index=0;index<rows.length;index++){
+  const item=rows[index].match(start);
+  if(!item||!/[\p{Script=Han}\p{Script=Katakana}\p{Script=Hiragana}]/u.test(item[2]))continue;
+  for(const row of rows.slice(index+1,index+4)){
+   if(/^\d{2}(?:-\d{2}){3}|^摘\s*要|合\s*計/.test(row))break;
+   const values=row.match(numericTail);
+   if(!values)continue;
+   const price=extOcrMoney_(values[2]),amount=extOcrMoney_(values[3]);
+   if(price>0&&amount>=price&&amount%price===0){
+    result.push({name:item[2],sku:'',qty:null,unit:'',price,amount,rate:Number(values[1]),category:'飲料',reason:''});
+   }
+   break;
+  }
+ }
+ return result;
 }
 
 function parseExtensionBrowserInvoice(input){
