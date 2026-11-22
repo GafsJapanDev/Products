@@ -134,7 +134,7 @@ function extParseKakuyasuCrop_(text){
   const quantities=loose===null?[count,pack*count]:[pack*count+loose];
   const valid=[...new Set(quantities)].filter(qty=>Number.isSafeInteger(qty)&&qty*price===amount);
   if(valid.length!==1)return [];
-  const unit=/缶/.test(name)?'缶':/瓶|ペット/.test(name)?'本':'';
+  const unit=/缶/.test(name)?'缶':/瓶|ペ[ \t]*ッ[ \t]*ト/.test(name)?'本':'';
   return [{name,sku:'',qty:valid[0],unit,price,amount,rate:Number(rate),category:'飲料',reason:''}];
  });
 }

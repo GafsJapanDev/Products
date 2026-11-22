@@ -296,8 +296,9 @@ function extLoadTesseract(){
  return extTesseractLibrary;
 }
 
-function extBrowserOcrRows(data){
- const fragments=(data.blocks||[]).flatMap(block=>block.paragraphs.flatMap(p=>p.lines)).map(line=>{
+function extBrowserOcrRows(data,useWords=false){
+ const lines=(data.blocks||[]).flatMap(block=>block.paragraphs.flatMap(p=>p.lines));
+ const fragments=(useWords?lines.flatMap(line=>line.words?.length?line.words:[line]):lines).map(line=>{
   const {x0,y0,y1}=line.bbox;
   return {x:x0,y:(y0+y1)/2,height:y1-y0,text:line.text.trim()};
  }).sort((a,b)=>a.y-b.y);
@@ -309,6 +310,39 @@ function extBrowserOcrRows(data){
   else rows.push([fragment]);
  }
  return rows.map(row=>row.sort((a,b)=>a.x-b.x).map(fragment=>fragment.text).join(' ')).join('\n');
+}
+
+function extKakuyasuDeskew(canvas){
+ const sample=document.createElement('canvas');
+ sample.width=420;
+ sample.height=Math.max(1,Math.round(canvas.height*sample.width/canvas.width));
+ const context=sample.getContext('2d',{willReadFrequently:true});
+ context.drawImage(canvas,0,0,sample.width,sample.height);
+ const {width,height}=sample;
+ const pixels=context.getImageData(0,0,width,height).data;
+ const edges=[];
+ // Sharp dark-to-light vertical transitions reveal the table's horizontal rules.
+ for(let y=Math.ceil(height*0.30);y<Math.floor(height*0.73);y++){
+  for(let x=48;x<width-30;x+=2){
+   const offset=(y*width+x)*4,above=offset-width*4;
+   const contrast=pixels[offset]+pixels[offset+1]+pixels[offset+2]-pixels[above]-pixels[above+1]-pixels[above+2];
+   if(Math.abs(contrast)>165)edges.push([x,y]);
+  }
+ }
+ if(edges.length<100)return 0;
+ const score=angle=>{
+  const slope=Math.tan(angle*Math.PI/180);
+  const bins=new Uint32Array(height+80);
+  for(const [x,y] of edges)bins[Math.round(y-(x-width/2)*slope)+40]++;
+  return bins.reduce((sum,count)=>sum+count*count,0);
+ };
+ const straight=score(0);
+ let best=straight,angle=0;
+ for(let step=-20;step<=20;step++){
+  const candidate=step/4,value=score(candidate);
+  if(value>best){best=value;angle=candidate;}
+ }
+ return best>straight*1.15?-angle:0;
 }
 
 function extInvoiceOrientationScore(data){
@@ -341,7 +375,7 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
    const scale=Math.min(2800/Math.max(image.width,image.height),2.5);
    const width=Math.max(1,Math.round(image.width*scale));
    const height=Math.max(1,Math.round(image.height*scale));
-   const draw=angle=>{
+   const draw=(angle,deskew=0)=>{
     const quarterTurn=Math.abs(angle)===90;
     canvas.width=quarterTurn?height:width;
     canvas.height=quarterTurn?width:height;
@@ -349,7 +383,7 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
     context.fillStyle='#fff';
     context.fillRect(0,0,canvas.width,canvas.height);
     context.translate(canvas.width/2,canvas.height/2);
-    context.rotate(angle*Math.PI/180);
+    context.rotate((angle+deskew)*Math.PI/180);
     context.drawImage(image,-width/2,-height/2,width,height);
    };
    for(const angle of angles){
@@ -362,16 +396,18 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
    const recognizedText=best?.data.text.normalize('NFKC').replace(/\s/g,'')||'';
    if(best&&(recognizedText.includes('カクヤス')||supplier==='カクヤス')&&!recognizedText.includes('容器回収票')){
     draw(best.angle);
+    const deskew=extKakuyasuDeskew(canvas);
+    if(deskew)draw(best.angle,deskew);
     // Use wide regions to allow for margins and small shifts in smartphone photos.
-    const readRegion=async(left,top,right,bottom)=>{
+    const readRegion=async(left,top,right,bottom,alignWords=false)=>{
      const x=Math.floor(canvas.width*left),y=Math.floor(canvas.height*top);
      const rectangle={left:x,top:y,width:Math.floor(canvas.width*right)-x,height:Math.floor(canvas.height*bottom)-y};
      const {data}=await worker.recognize(canvas,{rectangle},{text:true,blocks:true});
-     return extBrowserOcrRows(data);
+     return extBrowserOcrRows(data,alignWords);
     };
     try{
      await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SPARSE_TEXT});
-     const items=await readRegion(0.07,0.24,0.98,0.77);
+     const items=await readRegion(0.07,0.24,0.98,0.77,true);
      if(!timedOut)crops={items,totals:await readRegion(0.60,0.57,0.99,0.95)};
     }catch(_){
      // The full-page recognition remains available when a second pass fails.
