@@ -51,12 +51,19 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  </label>
  <label id="extOcrRotationLabel">写真の向き（新しい読み取りのみ）
   <select id="extOcrRotation">
+   <option value="auto">自動（写真ごとに判定）</option>
    <option value="0">そのまま</option>
    <option value="-90">左に90°回転</option>
    <option value="90">右に90°回転</option>
    <option value="180">180°回転</option>
   </select>
  </label>
+ <div id="extInvoiceCapture">
+  <p class="hint" id="extCaptureGuide">撮影するときは、伝票の文字の上を画面の上にし、紙の四隅と合計欄が入るように真上から撮ってください。横長の伝票はスマホを横にし、影や反射を避けてください。</p>
+  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">カメラで撮る</button>
+  <input id="extCamera" type="file" accept="image/*" capture="environment" hidden>
+  <p id="extCaptureStatus" class="hint" role="status"></p>
+ </div>
  <label>写真・PDFを追加<input id="extUpload" type="file" accept="image/jpeg,image/png,application/pdf" multiple></label>
  <p class="hint">日付が違う伝票も一緒に添付できます。1ファイルずつ別の伝票候補にし、複数枚で1件のものは読み取り後にまとめます。</p>
  <button id="extReadOcr" type="button">保存して読み取る</button>
