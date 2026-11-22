@@ -320,7 +320,7 @@ function extInvoiceOrientationScore(data){
  return (Number(data.confidence)||0)+matches*12+(date?12:0);
 }
 
-async function extReadBrowserInvoice(file,rotation='auto'){
+async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
  let worker, timer, timedOut=false;
  const read=async()=>{
   const engine=await extLoadTesseract();
@@ -336,13 +336,12 @@ async function extReadBrowserInvoice(file,rotation='auto'){
   const image=await createImageBitmap(file);
   const canvas=document.createElement('canvas');
   const angles=rotation==='auto'?[0,-90,90,180]:[Number(rotation)];
-  let best=null;
+  let best=null,crops=null;
   try{
    const scale=Math.min(2800/Math.max(image.width,image.height),2.5);
    const width=Math.max(1,Math.round(image.width*scale));
    const height=Math.max(1,Math.round(image.height*scale));
-   for(const angle of angles){
-    if(timedOut)throw Error('読み取り時間を超えました');
+   const draw=angle=>{
     const quarterTurn=Math.abs(angle)===90;
     canvas.width=quarterTurn?height:width;
     canvas.height=quarterTurn?width:height;
@@ -352,13 +351,35 @@ async function extReadBrowserInvoice(file,rotation='auto'){
     context.translate(canvas.width/2,canvas.height/2);
     context.rotate(angle*Math.PI/180);
     context.drawImage(image,-width/2,-height/2,width,height);
+   };
+   for(const angle of angles){
+    if(timedOut)throw Error('読み取り時間を超えました');
+    draw(angle);
     const {data}=await worker.recognize(canvas,{},{text:true,blocks:true});
     const score=extInvoiceOrientationScore(data);
     if(Number.isFinite(score)&&(!best||score>best.score))best={data,score,angle};
    }
+   const recognizedText=best?.data.text.normalize('NFKC').replace(/\s/g,'')||'';
+   if(best&&(recognizedText.includes('カクヤス')||supplier==='カクヤス')&&!recognizedText.includes('容器回収票')){
+    draw(best.angle);
+    // Use wide regions to allow for margins and small shifts in smartphone photos.
+    const readRegion=async(left,top,right,bottom)=>{
+     const x=Math.floor(canvas.width*left),y=Math.floor(canvas.height*top);
+     const rectangle={left:x,top:y,width:Math.floor(canvas.width*right)-x,height:Math.floor(canvas.height*bottom)-y};
+     const {data}=await worker.recognize(canvas,{rectangle},{text:true,blocks:true});
+     return extBrowserOcrRows(data);
+    };
+    try{
+     await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SPARSE_TEXT});
+     const items=await readRegion(0.07,0.24,0.98,0.77);
+     if(!timedOut)crops={items,totals:await readRegion(0.60,0.57,0.99,0.95)};
+    }catch(_){
+     // The full-page recognition remains available when a second pass fails.
+    }
+   }
   }finally{image.close();}
   if(!best)throw Error('文字を読み取れませんでした');
-  return {text:best.data.text,rowText:extBrowserOcrRows(best.data),rotation:best.angle};
+  return {text:best.data.text,rowText:extBrowserOcrRows(best.data),rotation:best.angle,crops};
  };
  try{
   return await Promise.race([read(),new Promise((_,reject)=>{
@@ -381,7 +402,7 @@ async function extProcessReceipt(entry){
     entry.sources=[await rpc('archiveExtensionDocument',{...input,base64:await extReadFile(upload.file)})];
    }
    let recognized;
-   try{recognized=await extReadBrowserInvoice(upload.file,entry.rotation);}
+   try{recognized=await extReadBrowserInvoice(upload.file,entry.rotation,entry.supplier);}
    catch(_){throw Error('新しい読み取りに失敗しました。従来の読み取りに切り替えて再試行できます');}
    const {rotation,...text}=recognized;
    result=await rpc('parseExtensionBrowserInvoice',{...text,fileId:entry.sources[0].id,supplier:entry.supplier});

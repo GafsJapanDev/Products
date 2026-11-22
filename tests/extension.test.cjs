@@ -173,6 +173,23 @@ test('Kakuyasu invoice number can follow the header on the next line',()=>{
  assert.equal(c.extParseInvoice_(text.replace('伝票 No.','区分'),'').invoiceNumber,'');
 });
 
+test('Kakuyasu crop separates item counts from case size and reads only labeled totals',()=>{
+ const c=harness();
+ const text='カクヤス\n日 付 伝票 No.\n26/10/31 790 83701234 26/10/31';
+ const items='33-33-33-33 テストビール 中瓶 500ML | 外10% | 20 | 3 | 286 | 858';
+ const draft=c.extParseInvoice_(text,'',text,{items,totals:'売上合計 858\n合 計 858'});
+ assert.equal(draft.printedTotal,858);
+ assert.equal(draft.lines.length,1);
+ const [line]=draft.lines;
+ assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount],['テストビール 中瓶',3,'本',286,858]);
+ const incomplete=c.extParseInvoice_(text,'',text,{items:items.replace('286 | ',''),totals:'858'});
+ assert.equal(incomplete.printedTotal,null);
+ assert.equal(incomplete.lines.length,0);
+ const cases=c.extParseInvoice_(text,'',text,{items:'テストビール 缶 外10% 20 2 3 10 430',totals:''});
+ assert.equal(cases.lines[0].qty,43);
+ assert.equal(cases.lines[0].unit,'缶');
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

@@ -19,7 +19,7 @@ function extParseJournal_(text){
   tax:extLabelNumber_(text,EXT_JOURNAL_LABELS.tax),groups:extLabelNumber_(text,EXT_JOURNAL_LABELS.groups,'件'),
   guests:people?Number(people[1]):null,payments,warnings:['読取候補です。原本と照合してから売上フォームへ反映してください。日計のみのため時間帯別の値は補いません。']};
 }
-function extParseInvoice_(text,supplier,rowText){
+function extParseInvoice_(text,supplier,rowText,crops){
  text=text.normalize('NFKC');
  const aligned=(rowText||text).normalize('NFKC');
  const metadata=text+'\n'+aligned;
@@ -58,9 +58,14 @@ function extParseInvoice_(text,supplier,rowText){
     const numbers=[...new Set([compact,aligned].map(source=>source.match(header)?.[2]).filter(Boolean))];
     if(numbers.length===1)invoiceNumber=numbers[0];
    }
-   const totals=[...aligned.matchAll(/^[ \t]*(差引|売上)?合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/gm)];
-   const printed=['差引',undefined,'売上'].map(label=>totals.filter(candidate=>candidate[1]===label)).find(matches=>matches.length);
-   if(printed?.length===1)total=extOcrMoney_(printed[0][2]);
+   for(const source of [crops?.totals,aligned]){
+    if(!source)continue;
+    const totals=[...source.normalize('NFKC').matchAll(/^[ \t]*(差引|売上)?合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/gm)];
+    const printed=['差引',undefined,'売上'].map(label=>totals.filter(candidate=>candidate[1]===label)).find(matches=>matches.length);
+    if(!printed)continue;
+    if(printed.length===1)total=extOcrMoney_(printed[0][2]);
+    break;
+   }
    if(/廃油回収/.test(metadata))returnWarnings.push('納品書に廃油回収があります。印字合計に含まれるマイナス分を確認し、必要なら調整額に入力してください。');
   }
   if(type==='return')total=extLabelNumber_(compact,'合\\s*計','');
@@ -84,7 +89,9 @@ function extParseInvoice_(text,supplier,rowText){
    lines.push({name,sku:'',qty,unit,price,amount,rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''});
  });
  if(typeof rowText==='string'){
-  const browserLines=extParseBrowserInvoiceLines_(rowText,supplier);
+  const browserLines=crops&&supplier==='カクヤス'&&type==='delivery'
+   ?extParseKakuyasuCrop_(crops.items)
+   :extParseBrowserInvoiceLines_(rowText,supplier);
   lines.splice(0,lines.length,...browserLines);
  }
  return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,
@@ -111,15 +118,38 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
  });
 }
 
+function extParseKakuyasuCrop_(text){
+ const number='(?:\\d{1,3}(?:,\\d{3})+|\\d+)';
+ const row=new RegExp('^(.+?)\\s+外\\s*(8|10)\\s*%\\s+('+number+')\\s+('+number+')'+
+  '(?:\\s+('+number+'))?\\s+('+number+')\\s+('+number+')$');
+ return text.normalize('NFKC').split(/\r?\n/).flatMap(raw=>{
+  const match=raw.replace(/[|│]/g,' ').trim().match(row);
+  if(!match)return [];
+  const [,label,rate,packText,countText,looseText,priceText,amountText]=match;
+  const name=label.replace(/^\d{2}(?:-\d{2}){3}\s+/, '').replace(/\s+\d+(?:\.\d+)?\s*(?:ML|L)$/i,'').trim();
+  if(!/[\p{L}]/u.test(name))return [];
+  const [pack,count,loose,price,amount]=[packText,countText,looseText,priceText,amountText].map(value=>extOcrMoney_(value));
+  if([pack,count,price,amount].some(value=>!Number.isSafeInteger(value)||value<=0))return [];
+  // A missing column cannot be guessed. Compare the possible bottle counts to the printed amount.
+  const quantities=loose===null?[count,pack*count]:[pack*count+loose];
+  const valid=[...new Set(quantities)].filter(qty=>Number.isSafeInteger(qty)&&qty*price===amount);
+  if(valid.length!==1)return [];
+  const unit=/缶/.test(name)?'缶':/瓶|ペット/.test(name)?'本':'';
+  return [{name,sku:'',qty:valid[0],unit,price,amount,rate:Number(rate),category:'飲料',reason:''}];
+ });
+}
+
 function parseExtensionBrowserInvoice(input){
  const started=Date.now(),state=locked_(()=>extState_());
  const file=state.file[extText_(input.fileId,100)];
  if(!file||!['image/jpeg','image/png'].includes(file.mime))throw Error('先に写真の原本を保存してください');
  const text=extText_(input.text,50000),rowText=extText_(input.rowText,50000);
  if(!text||!rowText)throw Error('OCRの読み取り結果が空です');
- const draft=extParseInvoice_(text,extText_(input.supplier,100),rowText);
+ const crops=input.crops?{items:extText_(input.crops.items,50000),totals:extText_(input.crops.totals,50000)}:null;
+ const draft=extParseInvoice_(text,extText_(input.supplier,100),rowText,crops);
+ if(crops&&draft.supplier==='カクヤス'&&draft.type==='delivery')draft.warnings.push('明細表と合計欄を別々に読み直しました。数量・単位を原本と確認してください。');
  draft.warnings.push('試験中のTesseract.jsで抽出した候補です。読み漏れがないか、原本の全明細を確認してください。');
- return {text,draft,source:{id:file.id,url:file.url,name:file.name},
+ return {text:crops?[text,'明細表の再 OCR\n'+crops.items,'合計欄の再 OCR\n'+crops.totals].join('\n\n'):text,draft,source:{id:file.id,url:file.url,name:file.name},
   timings:{ocrMs:Date.now()-started,cached:false}};
 }
 
