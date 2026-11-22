@@ -151,6 +151,18 @@ test('browser invoice OCR uses the stored image and rejects ambiguous numeric va
  assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount],['豚 肩ロース',1.5,'kg',1200,1800]);
 });
 
+test('supplier rules keep a blank page total and distinguish separate container returns',()=>{
+ const c=harness(),heading='MARUYASU 2026年10月6日 0000123456';
+ const first=c.extParseInvoice_(heading+' (1/2)','', '茄子|1.0|パック|330|330|5本いり\n合 計 ▶');
+ const last=c.extParseInvoice_(heading+' (2/2)','', '合 計 ▶ 5,018');
+ assert.equal(first.pageNumber,1);assert.equal(first.pageCount,2);assert.equal(first.printedTotal,null);
+ assert.equal(first.lines[0].amount,330);assert.equal(last.printedTotal,5018);
+ const receipt=c.extParseInvoice_('容 器 回 収 票\nカクヤス\n2026/10/19\nNo. 12345678','','合 計 20');
+ assert.equal(receipt.type,'return');assert.equal(receipt.printedTotal,20);assert.equal(receipt.invoiceNumber,'12345678');
+ const saved=c.saveExtensionInvoice(invoiceInput(c,receipt)).invoice;
+ assert.equal(c.extInvoiceBuckets_(saved).飲料,-20);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

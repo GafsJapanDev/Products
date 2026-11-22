@@ -66,6 +66,16 @@ async function main(){
  assert.equal(grouped.draft.printedTotal,2640);
  const ambiguous=sandbox.extMergeReceiptModels([page('p1',100),page('p2',200,'2026-11-01')],'ambiguous');
  assert.equal(ambiguous.draft.printedTotal,null);assert.equal(ambiguous.draft.date,'');
+ const firstPage=page('page-one',null),lastPage=page('page-two',5018);
+ Object.assign(firstPage.draft,{pageNumber:1,pageCount:2});
+ Object.assign(lastPage.draft,{pageNumber:2,pageCount:2});
+ firstPage.draft.lines=[{name:'first'}];lastPage.draft.lines=[{name:'last'}];
+ const complete=sandbox.extMergeReceiptModels([lastPage,firstPage],'complete');
+ assert.equal(complete.draft.printedTotal,5018);
+ assert.equal(complete.draft.lines.map(line=>line.name).join(','),'first,last');
+ assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,firstPage],'duplicate'),/重複なし/);
+ lastPage.draft.type='return';
+ assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,lastPage],'mixed'),/容器回収票/);
  // Pool starts at most two jobs and makes progress while another job is unfinished.
  let active=0,max=0,done=0;const releases=[];
  const pool=sandbox.extReceiptPool([1,2,3],()=>new Promise(resolve=>{active++;max=Math.max(max,active);releases.push(()=>{active--;done++;resolve();});}));

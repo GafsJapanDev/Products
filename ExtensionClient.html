@@ -426,11 +426,22 @@ $('extRetryReceipts').onclick=()=>{
 function extMergeReceiptModels(entries,id){
  if(entries.length<2||entries.some(r=>r.kind!=='invoice'||!r.draft))throw Error('2件以上の読み取り済みページを選択してください');
  const unique=key=>[...new Set(entries.map(r=>r.draft[key]).filter(v=>v!==''&&v!=null))];
+ if(entries.some(entry=>entry.draft.type==='return'))throw Error('容器回収票は納品書とまとめず、別に確認してください');
+ const paged=entries.some(entry=>entry.draft.pageCount>1);
+ if(paged){
+  const count=entries[0].draft.pageCount;
+  const sameInvoice=['supplier','date','invoiceNumber'].every(key=>unique(key).length===1&&entries.every(entry=>entry.draft[key]));
+  const complete=sameInvoice&&entries.length===count&&entries.every(entry=>entry.draft.pageCount===count)&&
+   new Set(entries.map(entry=>entry.draft.pageNumber)).size===count&&entries.every(entry=>entry.draft.pageNumber>=1&&entry.draft.pageNumber<=count);
+  if(!complete)throw Error('同じ仕入先・日付・伝票番号の全ページを、重複なしで選択してください');
+  entries=[...entries].sort((a,b)=>a.draft.pageNumber-b.draft.pageNumber);
+ }
  const first=structuredClone(entries[0].draft),dates=unique('date'),suppliers=unique('supplier'),numbers=unique('invoiceNumber'),totals=entries.map(r=>r.draft.printedTotal).filter(v=>v!==null&&v!==''&&v!==undefined);
  first.date=dates.length===1?dates[0]:'';first.supplier=suppliers.length===1?suppliers[0]:'';first.invoiceNumber=numbers.length===1?numbers[0]:'';
  first.printedTotal=totals.length===1?totals[0]:null;
  const taxes=entries.map(r=>r.draft.tax).filter(v=>v!==null&&v!==''&&v!==undefined);first.tax=taxes.length===1?taxes[0]:null;
  const modes=unique('taxMode'),types=unique('type');first.taxMode=modes.length===1?modes[0]:'';first.type=types.length===1?types[0]:'';
+ if(paged){first.pageNumber=null;first.pageCount=null;}
  first.lines=entries.flatMap(r=>r.draft.lines||[]);first.warnings=[...new Set(entries.flatMap(r=>r.draft.warnings||[]))];
  if(dates.length>1||suppliers.length>1)first.warnings.push('元のページの日付・仕入先が異なります。1件の伝票であることを確認し正しい値を指定してください。');
  if(totals.length!==1)first.warnings.push('全ページで1回分の合計を入力してください。ページ別合計を自動加算していません。');
@@ -486,6 +497,7 @@ function extValidateReviewDraft(d,kind){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date)||Number.isNaN(Date.parse(d.date+'T12:00:00Z'))||new Date(d.date+'T12:00:00Z').toISOString().slice(0,10)!==d.date)throw Error('正しい日付を入力してください');
  if(!extReceiptValidNumber(kind==='journal'?d.total:d.printedTotal))throw Error('印字合計を入力してください。未取得を0円にはしません');
  if(kind==='invoice'){
+  if(d.pageCount>1)throw Error('複数ページの伝票です。一覧で全ページを1伝票にまとめてください');
   if(!String(d.supplier||'').trim())throw Error('仕入先を入力してください');
   if(!['gross','net','monthly'].includes(d.taxMode)||!['delivery','return'].includes(d.type))throw Error('種類と税区分を選択してください');
   if(d.taxMode==='net'&&!extReceiptValidNumber(d.tax))throw Error('税別伝票の消費税を入力してください');

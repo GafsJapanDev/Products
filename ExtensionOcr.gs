@@ -20,8 +20,23 @@ function extParseJournal_(text){
   guests:people?Number(people[1]):null,payments,warnings:['読取候補です。原本と照合してから売上フォームへ反映してください。日計のみのため時間帯別の値は補いません。']};
 }
 function extParseInvoice_(text,supplier,rowText){
+ text=text.normalize('NFKC');
+ const aligned=(rowText||text).normalize('NFKC');
+ const metadata=text+'\n'+aligned;
+ const amountAfter=(pattern,source)=>extOcrMoney_(source.match(pattern)?.[1]);
+ const isReturn=/^\s*容\s*器\s*回\s*収\s*票\s*$/m.test(metadata);
+ if(isReturn&&(supplier==='カクヤス'||/カ[ \t]*ク[ \t]*ヤ[ \t]*ス/.test(metadata))){
+  const parts=metadata.match(/(20\d{2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{1,2})/);
+  const date=parts?parts[1]+'-'+parts[2].padStart(2,'0')+'-'+parts[3].padStart(2,'0'):'';
+  return {kind:'invoice',type:'return',supplier:'カクヤス',date,taxMode:'monthly',tax:null,lines:[],
+   invoiceNumber:metadata.match(/^\s*No\.?[ \t]*([0-9]+)\s*$/im)?.[1]||'',
+   printedTotal:amountAfter(/^[ \t]*合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/m,aligned),
+   warnings:['容器回収票です。印字合計を正の金額で確認してください。集計時に差し引きます。']};
+ }
  const detected=[['キタニ水産',/キタニ水産/],['maruyasu',/maruyasu|丸安商店/i],['プレコフーズ',/プレコ|PRECO/i],['西原',/西原商会/],['カクヤス',/カクヤス/]].filter(([,pattern])=>pattern.test(text));
  if(detected.length===1)supplier=detected[0][0];
+ let pageNumber=null,pageCount=null;
+ const returnWarnings=[];
  const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
  const first=dates[0],date=first?(first[1].length===2?'20':'')+first[1]+'-'+first[2].padStart(2,'0')+'-'+first[3].padStart(2,'0'):'';
  let total=extLabelNumber_(compact,'合計金額')??extLabelNumber_(compact,'差引合計')??extLabelNumber_(compact,'合計');
@@ -36,9 +51,18 @@ function extParseInvoice_(text,supplier,rowText){
  }else if(supplier==='カクヤス'){
   taxMode='monthly';
   const m=compact.match(/(?:伝票\s*N[oO][.．:]?|No[.．]?)\s*(\d+)/);invoiceNumber=m?m[1]:'';
+  if(type==='delivery'){
+   const totals=[...aligned.matchAll(/^[ \t]*(差引|売上)?合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/gm)];
+   const printed=['差引',undefined,'売上'].map(label=>totals.filter(candidate=>candidate[1]===label)).find(matches=>matches.length);
+   if(printed?.length===1)total=extOcrMoney_(printed[0][2]);
+   if(/廃油回収/.test(metadata))returnWarnings.push('納品書に廃油回収があります。印字合計に含まれるマイナス分を確認し、必要なら調整額に入力してください。');
+  }
   if(type==='return')total=extLabelNumber_(compact,'合\\s*計','');
  }else if(supplier==='maruyasu'){
-  const m=compact.match(/\b(0{2,}\d{4,})\b/);invoiceNumber=m?m[1]:'';
+  const m=metadata.match(/\b(0{2,}\d{4,})\b/);invoiceNumber=m?m[1]:'';
+  const page=metadata.match(/\([ \t]*(\d{1,2})[ \t]*\/[ \t]*(\d{1,2})[ \t]*\)/);
+  if(page&&+page[1]>0&&+page[1]<=+page[2]){pageNumber=+page[1];pageCount=+page[2];}
+  total=amountAfter(/(?:^|[ \t])合[ \t]*計[ \t]*(?:[▶►▷>]|:)?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/m,aligned);
  }else if(supplier==='西原'){
   const m=compact.match(/伝票番号\s*(\d+)/);invoiceNumber=m?m[1]:'';
  }
@@ -57,8 +81,8 @@ function extParseInvoice_(text,supplier,rowText){
   const browserLines=extParseBrowserInvoiceLines_(rowText,supplier);
   lines.splice(0,lines.length,...browserLines);
  }
- return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,
-  warnings:['金額・税区分・納品日を原本と照合してください。',...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?['複数枚を1件にまとめ、合計は1回だけ入力してください。']:[])]};
+ return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,
+  warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
 }
 /** The browser supplies one line of text per visually aligned row. */
 function extParseBrowserInvoiceLines_(rowText,supplier){
@@ -68,7 +92,9 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
   '[¥]?('+decimal+')(?:円)?\\s+[¥]?('+decimal+')(?:円)?$','i');
  const summary=/^(?:税込合計|税抜合計|小計|合計(?:金額)?|消費税(?:額)?|値引(?:き)?|伝票番号|納品日|伝票日付)(?:[ :]|$)/;
  return rowText.split(/\r?\n/).flatMap(raw=>{
-  const text=raw.normalize('NFKC').replace(/\|/g,' ').trim();
+  const normalized=raw.normalize('NFKC');
+  const cells=normalized.split('|');
+  const text=(supplier==='maruyasu'&&cells.length===6?cells.slice(0,5):cells).join(' ').trim();
   const match=text.match(row);
   if(!match||summary.test(text)||/数量.*(?:単価|金額)/.test(text))return [];
   const [,name,quantity,unit,price,amount]=match;
