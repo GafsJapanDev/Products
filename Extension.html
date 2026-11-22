@@ -67,7 +67,8 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  </label>
  <div id="extInvoiceCapture">
   <p class="hint" id="extCaptureGuide">撮影するときは、伝票の文字の上を画面の上にし、紙の四隅と合計欄が入るように真上から撮ってください。横長の伝票はスマホを横にし、影や反射を避けてください。</p>
-  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">カメラで撮る</button>
+  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">ガイド付きカメラ</button>
+  <button id="extOpenNativeCamera" type="button" aria-describedby="extCaptureGuide">標準カメラで撮る</button>
   <input id="extCamera" type="file" accept="image/*" capture="environment" hidden>
   <p id="extCaptureStatus" class="hint" role="status"></p>
  </div>
@@ -80,7 +81,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <p id="extBatchNotice" class="ext-warning" role="status"></p>
 </div></div>
 <dialog id="extCameraDialog" aria-label="伝票の撮影">
- <div class="ext-camera-stage">
+ <div id="extCameraStage" class="ext-camera-stage" hidden>
   <video id="extCameraVideo" playsinline autoplay muted></video>
   <canvas id="extCameraPhoto" aria-label="撮影した伝票" hidden></canvas>
   <div id="extCameraOverlay" class="ext-camera-guide"><span>文字の上を画面の上に。紙の四隅を枠の内側に。</span></div>
