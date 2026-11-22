@@ -35,7 +35,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
  }
  const detected=[['キタニ水産',/キタニ水産/],['maruyasu',/maruyasu|丸安商店/i],['プレコフーズ',/プレコ|PRECO/i],['西原',/西原商会/],['カクヤス',/カクヤス/]].filter(([,pattern])=>pattern.test(text));
  if(detected.length===1)supplier=detected[0][0];
- let pageNumber=null,pageCount=null;
+ let pageNumber=null,pageCount=null,requiresQuantityReview=false;
  const returnWarnings=[];
  const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
  const first=dates[0],date=first?(first[1].length===2?'20':'')+first[1]+'-'+first[2].padStart(2,'0')+'-'+first[3].padStart(2,'0'):'';
@@ -96,14 +96,16 @@ function extParseInvoice_(text,supplier,rowText,crops){
   if(!lines.length&&crops&&supplier==='カクヤス'&&type==='delivery'){
    for(const cell of crops.cells||[]){
     const {name,qty,price,amount}=cell;
-    if(!/[\p{L}]/u.test(name)||![qty,price,amount].every(value=>Number.isSafeInteger(value)&&value>0)||qty*price!==amount)continue;
+    if(!/[\p{L}]/u.test(name)||![price,amount].every(value=>Number.isSafeInteger(value)&&value>0))continue;
+    const verifiedQty=Number.isSafeInteger(qty)&&qty>0&&qty*price===amount?qty:null;
+    if(verifiedQty===null)requiresQuantityReview=true;
     const unit=/缶/.test(name)?'缶':/瓶|ペ[ \t]*ッ[ \t]*ト/.test(name)?'本':'';
-    lines.push({name,sku:'',qty,unit,price,amount,rate:'',category:'飲料',reason:''});
+    lines.push({name,sku:'',qty:verifiedQty,unit,price,amount,rate:'',category:'飲料',reason:''});
    }
   }
  }
- return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,
-  warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
+ return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,requiresQuantityReview,
+  warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(requiresQuantityReview?['明細候補の空欄は原本を見て補ってください。']:[]),...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
 }
 /** The browser supplies one line of text per visually aligned row. */
 function extParseBrowserInvoiceLines_(rowText,supplier){

@@ -196,8 +196,9 @@ test('Kakuyasu reread accepts an observed quantity only when it matches the row 
  const read=qty=>c.parseExtensionBrowserInvoice({fileId:'crop-test',supplier:'カクヤス',text:'カクヤス',rowText:'カクヤス',
   crops:{items:'中瓶',totals:'',cells:[{name:'テストビール 中瓶',qty,price:'286',amount:'858'}]}});
  assert.equal(read('3').draft.lines[0].qty,3);
- assert.equal(read('20').draft.lines.length,0);
- assert.equal(read('').draft.lines.length,0);
+ assert.equal(read('20').draft.lines[0].qty,null);
+ assert.equal(read('').draft.lines[0].qty,null);
+ assert.equal(read('').draft.requiresQuantityReview,true);
  assert.equal(read('3').draft.printedTotal,null);
 });
 
