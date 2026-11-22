@@ -72,6 +72,27 @@ async function main(){
  assert.equal(active,2);releases[1]();for(let i=0;i<10;i++)await Promise.resolve();
  assert.equal(done,1);assert.equal(releases.length,3);assert.equal(active,2);
  releases[0]();releases[2]();await pool;assert.equal(max,2);assert.equal(done,3);
+ // A failed browser OCR can retry through Drive using the original already in storage.
+ const previousRpc=sandbox.rpc;
+ const retryCalls=[];
+ sandbox.extReadFile=async()=> 'fixture-bytes';
+ sandbox.extReadBrowserInvoice=async()=>{throw Error('worker unavailable');};
+ sandbox.rpc=async(name,arg)=>{
+  retryCalls.push(name);
+  if(name==='archiveExtensionDocument')return {id:arg.id,name:arg.name};
+  if(name==='readExtensionOcr')return {source:{id:arg.fileId},text:'読取結果',draft:{warnings:[]}};
+ };
+ const retryEntry={id:'retry',kind:'invoice',engine:'browser',uploads:[{id:'fixture',file:{name:'fixture.png',type:'image/png'}}],sources:[]};
+ await sandbox.extProcessReceipt(retryEntry);
+ assert.equal(retryEntry.status,'failed');
+ assert.equal(retryEntry.sources[0].id,'fixture');
+ retryEntry.engine='drive';
+ await sandbox.extProcessReceipt(retryEntry);
+ assert.equal(retryEntry.status,'ready');
+ assert.deepEqual(retryCalls.filter(name=>name!=='reportExtensionClientError'),['archiveExtensionDocument','readExtensionOcr']);
+
+ sandbox.rpc=previousRpc;
+
  // Journal confirmation writes to the existing form and retains the source link.
  sandbox.tab='売上';sandbox.render();
  run("extReceiptQueue.push({id:'journal_one',kind:'journal',status:'ready',uploads:[],sources:[{id:'raw_journal'}],texts:[],draft:{date:'2026-11-20',total:3900,tax:354,groups:1,guests:1,payments:[{name:'現金',amount:3900}],warnings:[]}});extOpenReceiptReview('journal_one');");

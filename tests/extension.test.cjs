@@ -135,6 +135,22 @@ test('journal labels distinguish item count and people; uncertain invoice column
  const draft=c.extParseInvoice_('納品日 2026年10月27日\n品名 数量 単価\n合計 1,765円','西原');assert.equal(draft.lines.length,0);
 });
 
+test('browser invoice OCR uses the stored image and rejects ambiguous numeric values',()=>{
+ const c=harness();
+ const input={fileId:'browser-image',supplier:'西原',text:'納品日 2026/11/22\n伝票番号 0071\n合計 1,800円',
+  rowText:'商品名 数量 単価 金額\n豚 肩ロース｜１.５kg｜￥１,２００｜１,８００円\n豆腐 2 個 1O0 200\n合計 1,800円'};
+ assert.throws(()=>c.parseExtensionBrowserInvoice(input),/先に写真/);
+ c.extWrite_('file','browser-image',0,{opId:'browser-image-op'},{id:'browser-image',mime:'image/png',name:'fixture.png'});
+ const result=c.parseExtensionBrowserInvoice(input);
+ assert.equal(result.source.id,'browser-image');
+ assert.equal(result.draft.date,'2026-11-22');
+ assert.equal(result.draft.invoiceNumber,'0071');
+ assert.equal(result.draft.printedTotal,1800);
+ assert.equal(result.draft.lines.length,1);
+ const [line]=result.draft.lines;
+ assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount],['豚 肩ロース',1.5,'kg',1200,1800]);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

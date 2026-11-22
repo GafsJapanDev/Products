@@ -42,6 +42,13 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <button id="extCloseOcr" type="button">読み取りを閉じる</button>
  <h3 id="extOcrHeading">帳票の読み取り</h3><input id="extOcrKind" type="hidden" value="invoice">
  <label id="extOcrSupplierLabel">仕入先（不明なら空欄・伝票ごとに修正できます）<input id="extOcrSupplier" list="extSuppliers"></label>
+ <label id="extInvoiceOcrEngineLabel">写真の読み取り方法
+  <select id="extInvoiceOcrEngine">
+   <option value="browser">新しい読み取り（Tesseract.js）</option>
+   <option value="drive">従来の読み取り（Google Drive）</option>
+  </select>
+  <small>JPEG・PNGで比較できます。PDFは従来の読み取りを使用します。</small>
+ </label>
  <label>写真・PDFを追加<input id="extUpload" type="file" accept="image/jpeg,image/png,application/pdf" multiple></label>
  <p class="hint">日付が違う伝票も一緒に添付できます。1ファイルずつ別の伝票候補にし、複数枚で1件のものは読み取り後にまとめます。</p>
  <button id="extReadOcr" type="button">保存して読み取る</button>

@@ -19,7 +19,7 @@ function extParseJournal_(text){
   tax:extLabelNumber_(text,EXT_JOURNAL_LABELS.tax),groups:extLabelNumber_(text,EXT_JOURNAL_LABELS.groups,'件'),
   guests:people?Number(people[1]):null,payments,warnings:['読取候補です。原本と照合してから売上フォームへ反映してください。日計のみのため時間帯別の値は補いません。']};
 }
-function extParseInvoice_(text,supplier){
+function extParseInvoice_(text,supplier,rowText){
  const detected=[['キタニ水産',/キタニ水産/],['maruyasu',/maruyasu|丸安商店/i],['プレコフーズ',/プレコ|PRECO/i],['西原',/西原商会/],['カクヤス',/カクヤス/]].filter(([,pattern])=>pattern.test(text));
  if(detected.length===1)supplier=detected[0][0];
  const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
@@ -53,9 +53,44 @@ function extParseInvoice_(text,supplier){
   if(name&&qty!==null&&price!==null&&amount!==null&&/^(kg|Kg|KG|g|本|缶|袋|個|パック|P|箱|L|ml|ケース)$/i.test(unit))
    lines.push({name,sku:'',qty,unit,price,amount,rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''});
  });
+ if(typeof rowText==='string'){
+  const browserLines=extParseBrowserInvoiceLines_(rowText,supplier);
+  lines.splice(0,lines.length,...browserLines);
+ }
  return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,
   warnings:['金額・税区分・納品日を原本と照合してください。',...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?['複数枚を1件にまとめ、合計は1回だけ入力してください。']:[])]};
 }
+/** The browser supplies one line of text per visually aligned row. */
+function extParseBrowserInvoiceLines_(rowText,supplier){
+ const decimal='[+]?(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d{1,6})?';
+ const units='kg|ml|g|l|本|缶|袋|個|枚|パック|箱|ケース|束|玉|尾|丁|点|P';
+ const row=new RegExp('^(.+?)\\s+('+decimal+')\\s*(?:('+units+')\\s+|\\s+)'+
+  '[¥]?('+decimal+')(?:円)?\\s+[¥]?('+decimal+')(?:円)?$','i');
+ const summary=/^(?:税込合計|税抜合計|小計|合計(?:金額)?|消費税(?:額)?|値引(?:き)?|伝票番号|納品日|伝票日付)(?:[ :]|$)/;
+ return rowText.split(/\r?\n/).flatMap(raw=>{
+  const text=raw.normalize('NFKC').replace(/\|/g,' ').trim();
+  const match=text.match(row);
+  if(!match||summary.test(text)||/数量.*(?:単価|金額)/.test(text))return [];
+  const [,name,quantity,unit,price,amount]=match;
+  const values=[quantity,price,amount].map(value=>Number(value.replace(/,/g,'')));
+  if(values.some(value=>!Number.isFinite(value)||value>1e10))return [];
+  return [{name:name.trim(),sku:'',qty:values[0],unit:unit||'',price:values[1],amount:values[2],
+   rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''}];
+ });
+}
+
+function parseExtensionBrowserInvoice(input){
+ const started=Date.now(),state=locked_(()=>extState_());
+ const file=state.file[extText_(input.fileId,100)];
+ if(!file||!['image/jpeg','image/png'].includes(file.mime))throw Error('先に写真の原本を保存してください');
+ const text=extText_(input.text,50000),rowText=extText_(input.rowText,50000);
+ if(!text||!rowText)throw Error('OCRの読み取り結果が空です');
+ const draft=extParseInvoice_(text,extText_(input.supplier,100),rowText);
+ draft.warnings.push('試験中のTesseract.jsで抽出した候補です。読み漏れがないか、原本の全明細を確認してください。');
+ return {text,draft,source:{id:file.id,url:file.url,name:file.name},
+  timings:{ocrMs:Date.now()-started,cached:false}};
+}
+
 function archiveExtensionDocument(input){return locked_(()=>{
  const month=extMonth_(input.month),p=extEnvironment_(),id=extText_(input.id,100);
  if(!/^[a-zA-Z0-9_-]{8,100}$/.test(id))throw Error('原本IDが不正です');

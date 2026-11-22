@@ -51,6 +51,7 @@ render=function(){
   extSet('extOcrKind',kind);
   $('extOcrHeading').textContent=kind==='journal'?'売上ジャーナルを読み取る':'納品伝票を読み取る';
   $('extOcrSupplierLabel').hidden=kind==='journal';
+  $('extInvoiceOcrEngineLabel').hidden=kind==='journal';
   $(tab==='売上'?'extJournalOcrHost':'extPurchaseOcrHost').append($('extOcrPanel'));
  }
  if(tab==='仕入')extSyncPurchaseMode();
@@ -257,13 +258,13 @@ function extRenderReceiptQueue(){
   extReceiptText(tr,r.uploads.map(u=>u.file.name).join('、'));
   extReceiptText(tr,r.draft?.date||'未取得');extReceiptText(tr,r.draft?.supplier||'未取得');
   extReceiptText(tr,r.draft?.printedTotal??r.draft?.total??'未取得');
-  extReceiptText(tr,extReceiptStatuses(r.status)+(r.elapsedMs!=null?' ／ '+(r.elapsedMs/1000).toFixed(1)+'秒':'')+(r.cached?'（再読取を省略）':'')+(r.error?'：'+r.error:''));
+  extReceiptText(tr,extReceiptStatuses(r.status)+(r.elapsedMs!=null?' ／ '+(r.elapsedMs/1000).toFixed(1)+'秒':'')+(r.engineLabel?' ／ '+r.engineLabel:'')+(r.cached?'（再読取を省略）':'')+(r.error?'：'+r.error:''));
   const cell=extReceiptText(tr,''),button=document.createElement('button');button.type='button';button.textContent=r.status==='saved'?'内容を見る':'確認・修正';
   button.disabled=!r.draft||r.status==='saving';button.onclick=()=>extOpenReceiptReview(r.id);cell.append(button);$('extBatchRows').append(tr);
  });
  $('extSaveBatch').hidden=kind!=='invoice';$('extMergeReceipts').hidden=kind!=='invoice';
  $('extReadOcr').disabled=extReceiptReading;$('extUpload').disabled=extReceiptReading;
- $('extRetryReceipts').disabled=extReceiptReading;
+ $('extRetryReceipts').disabled=extReceiptReading;$('extInvoiceOcrEngine').disabled=extReceiptReading;
  $('extBatchNotice').textContent=kind==='invoice'?'確認済みの伝票だけを各納品日に保存します。確認途中・失敗した伝票は一覧に残ります。':'ジャーナルは1件ずつ確認し、売上入力欄へ反映してから保存します。';
 }
 async function extReceiptPool(entries,worker,limit=2){
@@ -271,17 +272,102 @@ async function extReceiptPool(entries,worker,limit=2){
  await Promise.all(Array.from({length:Math.min(limit,entries.length)},()=>run()));
 }
 async function extReadFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('写真・PDFを読めませんでした'));reader.readAsDataURL(file);});}
+const EXT_TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/';
+let extTesseractLibrary;
+
+function extLoadTesseract(){
+ if(!extTesseractLibrary){
+  extTesseractLibrary=new Promise((resolve,reject)=>{
+   const script=document.createElement('script');
+   script.src=EXT_TESSERACT_CDN+'tesseract.js@6.0.1/dist/tesseract.min.js';
+   script.integrity='sha384-r1ru3tcf6FhnCFR4B7pIFG+BhFF9LlFtz/P1y4pblWn3AGs9y3lBx5SKLNf4+rED';
+   script.crossOrigin='anonymous';
+   script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(Error('OCRライブラリが見つかりません'));
+   script.onerror=()=>{script.remove();reject(Error('OCRライブラリを読み込めません'));};
+   document.head.append(script);
+  }).catch(error=>{extTesseractLibrary=null;throw error;});
+ }
+ return extTesseractLibrary;
+}
+
+function extBrowserOcrRows(data){
+ const fragments=(data.blocks||[]).flatMap(block=>block.paragraphs.flatMap(p=>p.lines)).map(line=>{
+  const {x0,y0,y1}=line.bbox;
+  return {x:x0,y:(y0+y1)/2,height:y1-y0,text:line.text.trim()};
+ }).sort((a,b)=>a.y-b.y);
+ if(!fragments.length)return data.text;
+ const rows=[];
+ for(const fragment of fragments){
+  const row=rows.at(-1),first=row?.[0];
+  if(first&&Math.abs(first.y-fragment.y)<=Math.min(first.height,fragment.height)*0.45)row.push(fragment);
+  else rows.push([fragment]);
+ }
+ return rows.map(row=>row.sort((a,b)=>a.x-b.x).map(fragment=>fragment.text).join(' ')).join('\n');
+}
+
+async function extReadBrowserInvoice(file){
+ let worker, timer, timedOut=false;
+ const read=async()=>{
+  const engine=await extLoadTesseract();
+  if(timedOut)throw Error('読み取り時間を超えました');
+  const image=await createImageBitmap(file);
+  const canvas=document.createElement('canvas');
+  try{
+   const scale=Math.min(2800/Math.max(image.width,image.height),2.5);
+   canvas.width=Math.max(1,Math.round(image.width*scale));
+   canvas.height=Math.max(1,Math.round(image.height*scale));
+   const context=canvas.getContext('2d');
+   context.fillStyle='#fff';
+   context.fillRect(0,0,canvas.width,canvas.height);
+   context.drawImage(image,0,0,canvas.width,canvas.height);
+  }finally{image.close();}
+  if(timedOut)throw Error('読み取り時間を超えました');
+  const loaded=await engine.createWorker('jpn+eng',1,{
+   workerPath:EXT_TESSERACT_CDN+'tesseract.js@6.0.1/dist/worker.min.js',
+   corePath:EXT_TESSERACT_CDN+'tesseract.js-core@6.0.0/',
+   errorHandler(){}
+  });
+  if(timedOut){await loaded.terminate();throw Error('読み取り時間を超えました');}
+  worker=loaded;
+  await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SINGLE_BLOCK,preserve_interword_spaces:'1'});
+  const {data}=await worker.recognize(canvas,{},{text:true,blocks:true});
+  if(!data.text.trim())throw Error('文字を読み取れませんでした');
+  return {text:data.text,rowText:extBrowserOcrRows(data)};
+ };
+ try{
+  return await Promise.race([read(),new Promise((_,reject)=>{
+   timer=setTimeout(()=>{timedOut=true;reject(Error('読み取り時間を超えました'));},60000);
+  })]);
+ }finally{
+  clearTimeout(timer);
+  if(worker)await worker.terminate();
+ }
+}
+
 async function extProcessReceipt(entry){
  const started=Date.now();entry.status='reading';entry.error='';extRenderReceiptQueue();
  try{
   const upload=entry.uploads[0];let result;
-  if(entry.sources.length){
+  const input={id:upload.id,month:entry.uploadMonth,name:upload.file.name,mime:upload.file.type};
+  const browser=entry.kind==='invoice'&&entry.engine==='browser'&&['image/jpeg','image/png'].includes(input.mime);
+  if(browser){
+   if(!entry.sources.length){
+    entry.sources=[await rpc('archiveExtensionDocument',{...input,base64:await extReadFile(upload.file)})];
+   }
+   let recognized;
+   try{recognized=await extReadBrowserInvoice(upload.file);}
+   catch(_){throw Error('新しい読み取りに失敗しました。従来の読み取りに切り替えて再試行できます');}
+   result=await rpc('parseExtensionBrowserInvoice',{...recognized,fileId:entry.sources[0].id,supplier:entry.supplier});
+   entry.engineLabel='Tesseract.js';
+  }else if(entry.sources.length){
    result=await rpc('readExtensionOcr',{fileId:entry.sources[0].id,kind:entry.kind,supplier:entry.supplier});
+   entry.engineLabel='Google Drive';
   }else{
-   result=await rpc('processExtensionReceipt',{id:upload.id,month:entry.uploadMonth,name:upload.file.name,mime:upload.file.type,
+   result=await rpc('processExtensionReceipt',{...input,
     base64:await extReadFile(upload.file),kind:entry.kind,supplier:entry.supplier});
    if(result?.source)entry.sources=[result.source];
    if(result?.ok===false)throw Error(result.stage+'：'+result.error);
+   entry.engineLabel='Google Drive';
   }
   if(!result||typeof result.text!=='string'||!result.draft||!Array.isArray(result.draft.warnings))throw Error('OCRの返却結果が空または不正です。GASのバージョンを確認してください');
   entry.draft=result.draft;entry.sources=[result.source];entry.texts=[result.text];entry.cached=!!result.timings?.cached;entry.status='ready';
@@ -309,16 +395,20 @@ $('extReadOcr').onclick=async()=>{
   const files=[...$('extUpload').files];if(!files.length)throw Error('写真・PDFを選択してください');
   if(files.length>20)throw Error('一度に読み取るのは20ファイルまでです');
   if(!extUploadCache.length)extUploadCache=files.map(file=>({id:crypto.randomUUID(),file}));
-  const kind=extReceiptKind(),entries=[];
+  const kind=extReceiptKind(),engine=extVal('extInvoiceOcrEngine'),entries=[];
   extUploadCache.forEach(upload=>{
    let entry=extReceiptQueue.find(r=>r.uploads.some(u=>u.id===upload.id));
    if(!entry){entry={id:crypto.randomUUID(),kind,status:'reading',uploads:[upload],sources:[],texts:[],draft:null,supplier:extVal('extOcrSupplier'),uploadMonth:activeDate.slice(0,7)};extReceiptQueue.push(entry);}
-   if(!['saved','applied','merged','confirmed','ready'].includes(entry.status))entries.push(entry);
+   if(!['saved','applied','merged','confirmed','ready'].includes(entry.status)){entry.engine=engine;entries.push(entry);}
   });
   if(entries.length)await extReadReceiptEntries(entries);else showStatus('この添付は読み取り済みです。一覧から確認してください','warning');
  }catch(error){showStatus(extLogClientError(error,'読取開始'),'error');}
 };
-$('extRetryReceipts').onclick=()=>extReadReceiptEntries(extReceiptQueue.filter(r=>r.kind===extReceiptKind()&&r.status==='failed'));
+$('extRetryReceipts').onclick=()=>{
+ const entries=extReceiptQueue.filter(r=>r.kind===extReceiptKind()&&r.status==='failed');
+ entries.forEach(entry=>{entry.engine=extVal('extInvoiceOcrEngine');});
+ if(entries.length)extReadReceiptEntries(entries);
+};
 function extMergeReceiptModels(entries,id){
  if(entries.length<2||entries.some(r=>r.kind!=='invoice'||!r.draft))throw Error('2件以上の読み取り済みページを選択してください');
  const unique=key=>[...new Set(entries.map(r=>r.draft[key]).filter(v=>v!==''&&v!=null))];
