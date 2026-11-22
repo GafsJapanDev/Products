@@ -52,6 +52,12 @@ function extParseInvoice_(text,supplier,rowText){
   taxMode='monthly';
   const m=compact.match(/(?:伝票\s*N[oO][.．:]?|No[.．]?)\s*(\d+)/);invoiceNumber=m?m[1]:'';
   if(type==='delivery'){
+   if(!invoiceNumber){
+    // The printed header and its values often arrive on separate OCR lines.
+    const header=/日[ \t]*付[^\n]*伝[ \t]*票[ \t]*No\.?[^\n]*\n[ \t]*(\d{2,4}\/\d{1,2}\/\d{1,2})(?:[ \t|]+\d{1,4}){0,2}[ \t|]+(\d{8})[ \t|]+\1(?:[ \t|]|$)/im;
+    const numbers=[...new Set([compact,aligned].map(source=>source.match(header)?.[2]).filter(Boolean))];
+    if(numbers.length===1)invoiceNumber=numbers[0];
+   }
    const totals=[...aligned.matchAll(/^[ \t]*(差引|売上)?合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/gm)];
    const printed=['差引',undefined,'売上'].map(label=>totals.filter(candidate=>candidate[1]===label)).find(matches=>matches.length);
    if(printed?.length===1)total=extOcrMoney_(printed[0][2]);

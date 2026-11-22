@@ -163,6 +163,16 @@ test('supplier rules keep a blank page total and distinguish separate container 
  assert.equal(c.extInvoiceBuckets_(saved).飲料,-20);
 });
 
+test('Kakuyasu invoice number can follow the header on the next line',()=>{
+ const c=harness();
+ const text='株式会社 カクヤス\n日 付 |倉庫 伝票 No. @\n26/10/31 790 83701234 26/10/31\n外10%| 20\n不明 | 858';
+ const draft=c.extParseInvoice_(text,'',text);
+ assert.equal(draft.invoiceNumber,'83701234');
+ assert.equal(draft.printedTotal,null);
+ assert.equal(draft.lines.length,0);
+ assert.equal(c.extParseInvoice_(text.replace('伝票 No.','区分'),'').invoiceNumber,'');
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};
