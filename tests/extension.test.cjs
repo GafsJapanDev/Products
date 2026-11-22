@@ -165,7 +165,7 @@ test('supplier rules keep a blank page total and distinguish separate container 
 
 test('Kakuyasu invoice number can follow the header on the next line',()=>{
  const c=harness();
- const text='株式会社 カクヤス\n日 付 |倉庫 伝票 No. @\n26/10/31 790 83701234 26/10/31\n外10%| 20\n不明 | 858';
+ const text='株式会社 カクヤス\n日 付 |倉庫 伝票 No. @\n取引先名 様 26/10/31 790 83701234 26/10/31\n外10%| 20\n不明 | 858';
  const draft=c.extParseInvoice_(text,'',text);
  assert.equal(draft.invoiceNumber,'83701234');
  assert.equal(draft.printedTotal,null);
@@ -188,6 +188,17 @@ test('Kakuyasu crop separates item counts from case size and reads only labeled 
  const cases=c.extParseInvoice_(text,'',text,{items:'テストビール 缶 外10% 20 2 3 10 430',totals:''});
  assert.equal(cases.lines[0].qty,43);
  assert.equal(cases.lines[0].unit,'缶');
+});
+
+test('Kakuyasu reread accepts an observed quantity only when it matches the row amount',()=>{
+ const c=harness();
+ c.extWrite_('file','crop-test',0,{opId:'crop-test-op'},{id:'crop-test',mime:'image/png',name:'test.png'});
+ const read=qty=>c.parseExtensionBrowserInvoice({fileId:'crop-test',supplier:'カクヤス',text:'カクヤス',rowText:'カクヤス',
+  crops:{items:'中瓶',totals:'',cells:[{name:'テストビール 中瓶',qty,price:'286',amount:'858'}]}});
+ assert.equal(read('3').draft.lines[0].qty,3);
+ assert.equal(read('20').draft.lines.length,0);
+ assert.equal(read('').draft.lines.length,0);
+ assert.equal(read('3').draft.printedTotal,null);
 });
 
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{

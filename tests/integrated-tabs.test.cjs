@@ -76,6 +76,16 @@ async function main(){
  assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,firstPage],'duplicate'),/重複なし/);
  lastPage.draft.type='return';
  assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,lastPage],'mixed'),/容器回収票/);
+ const word=(text,x,y,width=12)=>({text,bbox:{x0:x,y0:y,x1:x+width,y1:y+12}});
+ const fields=sandbox.extKakuyasuFields({blocks:[{paragraphs:[{lines:[{words:[
+  word('商品',100,40),word('名',113,40),word('規格',200,40),
+  word('バラ',350,40),word('数',363,40),word('単価',410,40),
+  word('ビール',110,70,40),word('中瓶',152,70,24),word('286',413,70,18),word('858',476,70,18)
+ ]}]}]}]});
+ assert.equal(fields.length,1);
+ assert.equal(fields[0].name,'ビール 中瓶');
+ assert.equal(fields[0].amount,'858');
+ assert.ok(fields[0].left<355&&fields[0].right>365);
  // Pool starts at most two jobs and makes progress while another job is unfinished.
  let active=0,max=0,done=0;const releases=[];
  const pool=sandbox.extReceiptPool([1,2,3],()=>new Promise(resolve=>{active++;max=Math.max(max,active);releases.push(()=>{active--;done++;resolve();});}));

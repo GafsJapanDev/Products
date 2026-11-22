@@ -312,6 +312,43 @@ function extBrowserOcrRows(data,useWords=false){
  return rows.map(row=>row.sort((a,b)=>a.x-b.x).map(fragment=>fragment.text).join(' ')).join('\n');
 }
 
+function extKakuyasuFields(data){
+ const words=(data.blocks||[]).flatMap(block=>block.paragraphs.flatMap(p=>p.lines.flatMap(line=>line.words||[])))
+  .map(word=>({text:word.text.normalize('NFKC').trim(),...word.bbox})).filter(word=>word.text);
+ const center=(word,axis)=>(word[axis+'0']+word[axis+'1'])/2;
+ const ordered=[...words].sort((a,b)=>a.x0-b.x0);
+ const heading=(label,lower=-Infinity)=>{
+  for(const first of ordered){
+   if(first.x0<lower||!label.startsWith(first.text))continue;
+   const peers=ordered.filter(word=>word.x0>=first.x0&&Math.abs(center(word,'y')-center(first,'y'))<Math.max(5,first.y1-first.y0)*0.65);
+   let text='';
+   for(const word of peers.slice(0,3)){
+    text+=word.text;
+    if(text===label)return {...first,x1:word.x1};
+    if(!label.startsWith(text))break;
+   }
+  }
+ };
+ const loose=heading('バラ数'),price=loose&&heading('単価',loose.x1);
+ const name=heading('商品名'),size=name&&heading('規格',name.x1);
+ if(!loose||!price||!name||!size||Math.abs(center(loose,'y')-center(price,'y'))>price.y1-price.y0)return [];
+ const step=center(price,'x')-center(loose,'x'),priceX=center(price,'x');
+ const number=/^\d{1,3}(?:,\d{3})*$|^\d+$/;
+ const fields=[];
+ for(const word of words){
+  const y=center(word,'y'),height=word.y1-word.y0;
+  if(height<4||word.y0<price.y1||Math.abs(center(word,'x')-priceX)>step*0.49||!number.test(word.text))continue;
+  const amounts=words.filter(next=>center(next,'x')>priceX+step*0.5&&Math.abs(center(next,'y')-y)<=height*0.6&&number.test(next.text));
+  const names=ordered.filter(next=>center(next,'x')>name.x0-(size.x0-name.x0)*0.55&&
+   center(next,'x')<size.x0&&next.y0>=name.y1&&Math.abs(center(next,'y')-y)<=height*1.2&&/[\p{L}]/u.test(next.text));
+  if(amounts.length!==1||!names.length)continue;
+  fields.push({name:names.map(next=>next.text).join(' '),price:word.text,amount:amounts[0].text,
+   left:Math.max(0,Math.round(priceX-step*1.5)),top:Math.max(0,Math.round(word.y0-height*0.45)),
+   right:Math.round(priceX-step*0.5),bottom:Math.round(word.y1+height*0.45)});
+ }
+ return fields.slice(0,20);
+}
+
 function extKakuyasuDeskew(canvas){
  const sample=document.createElement('canvas');
  sample.width=420;
@@ -403,12 +440,25 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
      const x=Math.floor(canvas.width*left),y=Math.floor(canvas.height*top);
      const rectangle={left:x,top:y,width:Math.floor(canvas.width*right)-x,height:Math.floor(canvas.height*bottom)-y};
      const {data}=await worker.recognize(canvas,{rectangle},{text:true,blocks:true});
-     return extBrowserOcrRows(data,alignWords);
+     return alignWords?data:extBrowserOcrRows(data);
     };
     try{
      await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SPARSE_TEXT});
-     const items=await readRegion(0.07,0.24,0.98,0.77,true);
-     if(!timedOut)crops={items,totals:await readRegion(0.60,0.57,0.99,0.95)};
+     const table=await readRegion(0.07,0.24,0.98,0.77,true);
+     const items=extBrowserOcrRows(table,true);
+     if(!timedOut)crops={items,totals:await readRegion(0.60,0.57,0.99,0.95),cells:[]};
+     const candidates=extKakuyasuFields(table);
+     if(crops&&candidates.length){
+      await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SINGLE_WORD,tessedit_char_whitelist:'0123456789'});
+      for(const {name,price,amount,left,top,right,bottom} of candidates){
+       if(timedOut)break;
+       const rectangle={left,top,width:Math.min(right,canvas.width)-left,height:Math.min(bottom,canvas.height)-top};
+       if(rectangle.width<1||rectangle.height<1)continue;
+       const {data}=await worker.recognize(canvas,{rectangle},{text:true});
+       const qty=data.text.trim();
+       if(/^\d+$/.test(qty))crops.cells.push({name,price,amount,qty});
+      }
+     }
     }catch(_){
      // The full-page recognition remains available when a second pass fails.
     }
