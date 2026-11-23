@@ -819,11 +819,17 @@ function extReviewInput(id,value,type='text',required=false){
  const el=$(id);el.value=value??'';if(type==='number'){el.min='0';el.step='any';}
  el.classList.toggle('ext-missing',required&&(value===''||value==null));
 }
+function extReviewRequiresUnit(supplier){
+ return !['カクヤス','maruyasu'].includes(supplier.normalize('NFKC').trim().toLowerCase());
+}
 function extReviewCell(row,key,value,type='text',options){
  const td=document.createElement('td'),field=document.createElement(options?'select':'input');field.dataset.key=key;
  if(options)extSelect(field,options,value==null?'':String(value));else{field.type=type;field.value=value??'';if(type==='number'){if(!['price','amount'].includes(key))field.min='0';field.step='any';}}
- field.classList.toggle('ext-missing',!['sku','reason'].includes(key)&&(value===''||value==null));field.setAttribute('aria-label',key);
- field.oninput=()=>{field.classList.toggle('ext-missing',!['sku','reason'].includes(key)&&field.value==='');extUpdateReviewDifference();};
+ const updateMissing=()=>field.classList.toggle('ext-missing',
+  !['sku','reason'].includes(key)&&(key!=='unit'||extReviewRequiresUnit(extVal('extReviewSupplier')))&&field.value==='');
+ updateMissing();
+ field.setAttribute('aria-label',key);
+ field.oninput=()=>{updateMissing();extUpdateReviewDifference();};
  td.append(field);row.append(td);
 }
 function extReviewUsesUnit(){
@@ -831,6 +837,8 @@ function extReviewUsesUnit(){
 }
 function extSyncReviewUnits(){
  $('extReceiptDialog').classList.toggle('ext-no-unit',!extReviewUsesUnit());
+ const required=extReviewRequiresUnit(extVal('extReviewSupplier'));
+ $('extReviewLines').querySelectorAll('[data-key="unit"]').forEach(field=>field.classList.toggle('ext-missing',required&&!field.value));
 }
 $('extReviewSupplier').addEventListener('input',extSyncReviewUnits);
 function extReviewAddRow(value={}){
@@ -870,7 +878,7 @@ function extValidateReviewDraft(d,kind){
   const kakuyasu=d.supplier.normalize('NFKC').trim()==='カクヤス';
   d.lines.forEach((l,i)=>{
    const credit=kakuyasu&&d.type==='delivery'&&/廃油回収/.test(l.name)&&Number.isFinite(l.price)&&Number.isFinite(l.amount)&&l.price<0&&l.amount<0;
-   if(!String(l.name||'').trim()||(!kakuyasu&&!String(l.unit||'').trim())||(!credit&&!extReceiptValidNumber(l.amount)))throw Error((i+1)+'行目の品名・単位・金額を確認してください');
+   if(!String(l.name||'').trim()||(extReviewRequiresUnit(d.supplier)&&!String(l.unit||'').trim())||(!credit&&!extReceiptValidNumber(l.amount)))throw Error((i+1)+'行目の品名・単位・金額を確認してください');
    if(l.qty!==null&&!extReceiptValidNumber(l.qty)||!credit&&l.price!==null&&!extReceiptValidNumber(l.price))throw Error((i+1)+'行目の数量・単価を確認してください');
    if(credit&&(!l.qty||Math.abs(l.qty*l.price-l.amount)>0.000001))throw Error('廃油回収の数量×単価と明細金額を確認してください');
    if(l.qty!==null&&l.price!==null&&Math.abs(l.qty*l.price-l.amount)>1&&!String(l.reason||'').trim())throw Error((i+1)+'行目：数量×単価と金額が違います。理由を入力してください');

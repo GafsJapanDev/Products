@@ -358,6 +358,11 @@ test('Maruyasu pages preserve spaced dates, inline remarks, and the final total'
  assert.equal(first.printedTotal,null);
  assert.equal(last.printedTotal,5018);
  assert.equal([...first.lines,...last.lines].reduce((sum,line)=>sum+line.amount,0),5018);
+ const saved=c.saveExtensionInvoice(invoiceInput(c,{...last,lines:[...first.lines,...last.lines]})).invoice;
+ assert.equal(saved.lines.length,15);
+ assert.equal(saved.total,5018);
+ assert.equal(saved.lines[13].unit,'');
+ assert.equal(saved.lines[14].unit,'束');
 });
 
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{

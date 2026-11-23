@@ -36,9 +36,10 @@ function saveExtensionInvoice(input) {return locked_(()=>{
  const taxMode=extText_(input.taxMode);
  if(!['gross','net','monthly'].includes(taxMode))throw Error('税込・税別・月締税を選択してください');
  const usesUnit=supplier.name!=='カクヤス';
+ const requiresUnit=usesUnit&&extNormalize_(supplier.name)!=='maruyasu';
  const lines=(input.lines||[]).map((x,index)=>{
   const name=extText_(x.name,150),sku=extText_(x.sku,100),unit=usesUnit?extText_(x.unit,30):'',category=extText_(x.category||'食材');
-  if(!name||(usesUnit&&!unit)||!['食材','飲料','雑費','容器'].includes(category))throw Error((index+1)+'行目の品名・単位・分類を確認してください');
+  if(!name||(requiresUnit&&!unit)||!['食材','飲料','雑費','容器'].includes(category))throw Error((index+1)+'行目の品名・単位・分類を確認してください');
   const qty=extNumber_(x.qty,false);
   const credit=!usesUnit&&type==='delivery'&&/廃油回収/.test(name)&&Number(x.price)<0&&Number(x.amount)<0;
   const price=credit?-extNumber_(-Number(x.price),true):extNumber_(x.price,false);

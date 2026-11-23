@@ -121,7 +121,6 @@ function extParseInvoice_(text,supplier,rowText,crops){
  if(typeof rowText!=='string'&&supplier==='maruyasu'){
   const drive=extParseMaruyasuDrive_(compact);
   if(!lines.length)lines.push(...drive.lines);
-  if(drive.lines.some(line=>!line.unit))returnWarnings.push('単位を読み取れない明細があります。原本を見て単位を入力してください。');
   if(drive.total!==null)total=drive.total;
  }
  if(typeof rowText!=='string'&&supplier==='カクヤス'&&type==='delivery'){
