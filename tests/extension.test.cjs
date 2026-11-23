@@ -274,6 +274,33 @@ test('Kakuyasu Drive OCR recovers three items when headings interrupt the first 
  assert.equal(parse(text.replace('売上合計\n1, 188','売上合計\n1, 188\n売上合計\n1, 189')).printedTotal,null);
 });
 
+test('Kakuyasu Drive OCR saves the printed oil collection credit exactly once',()=>{
+ const c=harness();
+ const text=[
+  'カクヤス','日付 倉庫 区分 伝票 No. 26/10/23','83701234','26/10/23',
+  'コード','商 品名','規格','税区','入数','ケース数','バラ数','金額',
+  '22-01-02-01','テスト 緑茶','2L','224225','外8%','6','1','151','151',
+  '22-05-02-01','テスト 強炭酸水','500ML','236400','91-8%','24','3','74','222',
+  '00-00-00-00','【廃油回収】 テスト品','0','外10%','1','3','-3','-9',
+  '摘要','売上合計','364'
+ ].join('\n');
+ const draft=c.extParseInvoice_(text,'');
+ assert.equal(draft.invoiceNumber,'83701234');
+ assert.equal(draft.lines.length,3);
+ assert.equal(draft.lines.reduce((sum,line)=>sum+line.amount,0),364);
+ const saved=c.saveExtensionInvoice(invoiceInput(c,draft)).invoice;
+ assert.equal(saved.printedTotal,364);
+ assert.equal(saved.adjustment,0);
+ assert.equal(saved.lines[2].price,-3);
+ assert.equal(saved.lines[2].amount,-9);
+ assert.equal(saved.lines[2].rate,10);
+ const buckets=c.extInvoiceBuckets_(saved);
+ assert.equal(buckets.飲料,373);
+ assert.equal(buckets.雑費,-9);
+ const other=invoiceInput(c,{...draft,supplier:'西原',lines:draft.lines.map(line=>({...line,unit:'本'}))});
+ assert.throws(()=>c.saveExtensionInvoice(other),/0以上/);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

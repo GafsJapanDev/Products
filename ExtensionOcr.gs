@@ -54,7 +54,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
   if(type==='delivery'){
    if(!/^\d{8}$/.test(invoiceNumber))invoiceNumber='';
    if(!invoiceNumber){
-    const splitNumber=compact.match(/^[ \t]*伝[ \t]*票[ \t]*No\.?[ \t]*\n(?:[ \t]*[O○◎][ \t]*\n)?[ \t]*(\d{8})[ \t]*$/im);
+    const splitNumber=compact.match(/^[^\n]*?伝[ \t]*票[ \t]*No\.?(?:[ \t]+\d{2,4}\/\d{1,2}\/\d{1,2})?[ \t]*\n(?:[ \t]*[O○◎][ \t]*\n)?[ \t]*(\d{8})[ \t]*$/im);
     const separated=compact.match(/^[ \t]*伝[ \t]*票[ \t]*No\.?[ \t]*\n[ \t]*(\d{2,4}\/\d{1,2}\/\d{1,2})[ \t]*\n[ \t]*\d{1,4}[ \t]*\n[ \t]*(\d{8})[ \t]*\n[ \t]*\1[ \t]*$/im);
     invoiceNumber=splitNumber?.[1]||separated?.[2]||'';
    }
@@ -72,7 +72,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
     if(printed.length===1)total=extOcrMoney_(printed[0][2]);
     break;
    }
-   if(/廃油回収/.test(metadata))returnWarnings.push('納品書に廃油回収があります。印字合計に含まれるマイナス分を確認し、必要なら調整額に入力してください。');
+
   }
   if(type==='return')total=extLabelNumber_(compact,'合\\s*計','');
  }else if(supplier==='maruyasu'){
@@ -121,6 +121,9 @@ function extParseInvoice_(text,supplier,rowText,crops){
   if(drive.total!==null)total=drive.total;
  }
  if(supplier==='カクヤス'&&type==='delivery'){
+  if(/廃油回収/.test(metadata))returnWarnings.push(lines.some(line=>line.amount<0&&/廃油回収/.test(line.name))
+   ?'廃油回収はマイナス明細に含まれています。調整額で重ねて差し引かないでください。'
+   :'廃油回収の金額を原本で確認し、マイナス明細として追加してください。');
   lines.forEach(line=>{line.unit='';});
   requiresQuantityReview=lines.some(line=>line.qty===null);
  }
@@ -149,7 +152,7 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
 }
 
 function extParseKakuyasuDrive_(text){
- const rows=text.split(/\r?\n/).map(row=>row.trim().replace(/,(?=[ \t]+\d{3}(?:\D|$))[ \t]+/g,',')).filter(Boolean);
+ const rows=text.split(/\r?\n/).map(row=>row.trim().replace(/^[−–—](?=\d)/,'-').replace(/,(?=[ \t]+\d{3}(?:\D|$))[ \t]+/g,',')).filter(Boolean);
  const code=/^\d{2}(?:-\d{2}){3}$/;
  const amount=/^\d+(?:,\d{3})*$/;
  const first=rows.findIndex(row=>code.test(row));
@@ -167,9 +170,11 @@ function extParseKakuyasuDrive_(text){
    if(!name||!/[\p{L}]/u.test(name)||taxIndex<2)continue;
    const values=item.slice(taxIndex+1);
    const numeric=count=>{
-    if(![4,5].includes(count.length)||!count.every(value=>amount.test(value)))return null;
+    if(![4,5].includes(count.length)||!count.slice(0,-2).every(value=>amount.test(value))||
+     !count.slice(-2).every(value=>amount.test(value.replace(/^-/,''))))return null;
     const [qty,price,lineAmount]=count.slice(-3).map(extOcrMoney_);
-    return [qty,price,lineAmount].every(Number.isSafeInteger)&&qty>0&&price>0&&qty*price===lineAmount
+    const validSign=/廃油回収/.test(name)?price<0&&lineAmount<0:price>0&&lineAmount>0;
+    return [qty,price,lineAmount].every(Number.isSafeInteger)&&qty>0&&validSign&&qty*price===lineAmount
      ?[qty,price,lineAmount]:null;
    };
    const last=values[values.length-1]||'';
@@ -178,7 +183,7 @@ function extParseKakuyasuDrive_(text){
    if(Boolean(full)===Boolean(withoutSku))continue;
    const [qty,price,lineAmount]=full||withoutSku;
    const tax=item[taxIndex].match(/^(?:(?:外|内)\s*|[0-9A-Za-z]+-\s*)?(8|10)\s*%$/);
-   lines.push({name,sku:withoutSku?trailingSku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:'飲料',reason:''});
+   lines.push({name,sku:withoutSku?trailingSku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:lineAmount<0?'雑費':'飲料',reason:''});
   }
  }
  const totals=new Map();
