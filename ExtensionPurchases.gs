@@ -35,9 +35,10 @@ function saveExtensionInvoice(input) {return locked_(()=>{
  const type=input.type==='return'?'return':'delivery',status=input.status==='cancelled'?'cancelled':'confirmed';
  const taxMode=extText_(input.taxMode);
  if(!['gross','net','monthly'].includes(taxMode))throw Error('税込・税別・月締税を選択してください');
+ const usesUnit=supplier.name!=='カクヤス'||type!=='delivery';
  const lines=(input.lines||[]).map((x,index)=>{
-  const name=extText_(x.name,150),sku=extText_(x.sku,100),unit=extText_(x.unit,30),category=extText_(x.category||'食材');
-  if(!name||!unit||!['食材','飲料','雑費','容器'].includes(category))throw Error((index+1)+'行目の品名・単位・分類を確認してください');
+  const name=extText_(x.name,150),sku=extText_(x.sku,100),unit=usesUnit?extText_(x.unit,30):'',category=extText_(x.category||'食材');
+  if(!name||(usesUnit&&!unit)||!['食材','飲料','雑費','容器'].includes(category))throw Error((index+1)+'行目の品名・単位・分類を確認してください');
   const qty=extNumber_(x.qty,false),price=extNumber_(x.price,false),amount=extNumber_(x.amount,true);
   const rate=x.rate===''||x.rate==null?null:Number(x.rate);
   if(rate!==null&&![0,8,10].includes(rate))throw Error('税率を確認してください');

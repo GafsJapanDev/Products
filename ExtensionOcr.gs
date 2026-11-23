@@ -93,20 +93,25 @@ function extParseInvoice_(text,supplier,rowText,crops){
    ?extParseKakuyasuCrop_(crops.items)
    :extParseBrowserInvoiceLines_(rowText,supplier);
   lines.splice(0,lines.length,...browserLines);
-  if(!lines.length&&crops&&supplier==='カクヤス'&&type==='delivery'){
+  if(crops&&supplier==='カクヤス'&&type==='delivery'){
    for(const cell of crops.cells||[]){
     const {name,qty,price,amount}=cell;
     if(!/[\p{L}]/u.test(name)||![price,amount].every(value=>Number.isSafeInteger(value)&&value>0))continue;
     const verifiedQty=Number.isSafeInteger(qty)&&qty>0&&qty*price===amount?qty:null;
     if(verifiedQty===null)requiresQuantityReview=true;
-    const unit=/缶/.test(name)?'缶':/瓶|ペ[ \t]*ッ[ \t]*ト/.test(name)?'本':'';
-    lines.push({name,sku:'',qty:verifiedQty,unit,price,amount,rate:'',category:'飲料',reason:''});
+    const matches=lines.filter(line=>line.price===price&&line.amount===amount);
+    if(matches.length===1&&matches[0].qty===null&&verifiedQty!==null)matches[0].qty=verifiedQty;
+    if(!browserLines.length&&!matches.length)lines.push({name,sku:'',qty:verifiedQty,unit:'',price,amount,rate:'',category:'飲料',reason:''});
    }
   }
  }
  if(!lines.length&&crops&&supplier==='カクヤス'&&type==='delivery'){
   lines.push(...extParseKakuyasuWrappedRows_(crops.items));
   requiresQuantityReview=lines.length>0;
+ }
+ if(supplier==='カクヤス'&&type==='delivery'){
+  lines.forEach(line=>{line.unit='';});
+  requiresQuantityReview=lines.some(line=>line.qty===null);
  }
  return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,requiresQuantityReview,
   warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(requiresQuantityReview?['明細候補の空欄は原本を見て補ってください。']:[]),...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
@@ -139,17 +144,13 @@ function extParseKakuyasuCrop_(text){
  return text.normalize('NFKC').split(/\r?\n/).flatMap(raw=>{
   const match=raw.replace(/[|│]/g,' ').trim().match(row);
   if(!match)return [];
-  const [,label,rate,packText,countText,looseText,priceText,amountText]=match;
+  const [,label,rate,,,looseText,priceText,amountText]=match;
   const name=label.replace(/^\d{2}(?:-\d{2}){3}\s+/, '').replace(/\s+\d+(?:\.\d+)?\s*(?:ML|L)$/i,'').trim();
   if(!/[\p{L}]/u.test(name))return [];
-  const [pack,count,loose,price,amount]=[packText,countText,looseText,priceText,amountText].map(value=>extOcrMoney_(value));
-  if([pack,count,price,amount].some(value=>!Number.isSafeInteger(value)||value<=0))return [];
-  // A missing column cannot be guessed. Compare the possible bottle counts to the printed amount.
-  const quantities=loose===null?[count,pack*count]:[pack*count+loose];
-  const valid=[...new Set(quantities)].filter(qty=>Number.isSafeInteger(qty)&&qty*price===amount);
-  if(valid.length!==1)return [];
-  const unit=/缶/.test(name)?'缶':/瓶|ペ[ \t]*ッ[ \t]*ト/.test(name)?'本':'';
-  return [{name,sku:'',qty:valid[0],unit,price,amount,rate:Number(rate),category:'飲料',reason:''}];
+  const [qty,price,amount]=[looseText,priceText,amountText].map(value=>extOcrMoney_(value));
+  if([price,amount].some(value=>!Number.isSafeInteger(value)||value<=0))return [];
+  // One surviving count could be the case count. Require a separate observation of the loose-count cell.
+  return [{name,sku:'',qty,unit:'',price,amount,rate:Number(rate),category:'飲料',reason:''}];
  });
 }
 

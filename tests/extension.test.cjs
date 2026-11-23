@@ -181,13 +181,13 @@ test('Kakuyasu crop separates item counts from case size and reads only labeled 
  assert.equal(draft.printedTotal,858);
  assert.equal(draft.lines.length,1);
  const [line]=draft.lines;
- assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount],['テストビール 中瓶',3,'本',286,858]);
+ assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount],['テストビール 中瓶',null,'',286,858]);
  const incomplete=c.extParseInvoice_(text,'',text,{items:items.replace('286 | ',''),totals:'858'});
  assert.equal(incomplete.printedTotal,null);
  assert.equal(incomplete.lines.length,0);
  const cases=c.extParseInvoice_(text,'',text,{items:'テストビール 缶 外10% 20 2 3 10 430',totals:''});
- assert.equal(cases.lines[0].qty,43);
- assert.equal(cases.lines[0].unit,'缶');
+ assert.equal(cases.lines[0].qty,3);
+ assert.equal(cases.lines[0].unit,'');
 });
 
 test('Kakuyasu reread accepts an observed quantity only when it matches the row amount',()=>{
@@ -212,6 +212,16 @@ test('wrapped Kakuyasu OCR keeps partial items without inferring quantities or t
  assert.equal(draft.printedTotal,null);
  assert.equal(draft.requiresQuantityReview,true);
  assert.equal(parse(items.replace('ー ル hik','摘要')).lines.length,0);
+});
+
+test('Kakuyasu deliveries save loose quantity without a unit',()=>{
+ const c=harness();
+ const input=invoiceInput(c,{supplier:'カクヤス',printedTotal:858});
+ Object.assign(input.lines[0],{name:'テストビール',qty:3,price:286,amount:858,unit:'',category:'飲料'});
+ const saved=c.saveExtensionInvoice(input).invoice;
+ assert.equal(saved.lines[0].unit,'');
+ assert.equal(saved.lines[0].qty,3);
+ assert.throws(()=>c.saveExtensionInvoice(invoiceInput(c,{lines:input.lines,printedTotal:858})),/単位/);
 });
 
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{

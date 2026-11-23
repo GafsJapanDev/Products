@@ -123,16 +123,21 @@ function extEditInvoice(invoice){
  const i=extInvoice;
  extSet('extSupplier',i.supplier?.name);extSet('extInvoiceNumber',i.invoiceNumber);extSet('extType',i.type||'delivery');
  extSet('extTaxMode',i.taxMode||'gross');extSet('extTotal',i.printedTotal);extSet('extTax',i.tax);extSet('extAdjustment',i.adjustment||0);extSet('extReason',i.reason);
- $('extLines').replaceChildren();i.lines.forEach(extAddLine);
+ $('extLines').replaceChildren();i.lines.forEach(extAddLine);extSyncInvoiceUnits();
  const legacy=[{id:'',label:'新しい伝票'}];extContext?.legacy.forEach(r=>r.items.forEach((item,index)=>legacy.push({id:r.id+'|'+index,label:r.date+' '+item.name+' '+item.amount+'円'})));
  extSelect($('extLegacy'),legacy,i.legacyLink?i.legacyLink.recordId+'|'+i.legacyLink.itemIndex:'');
  $('extInvoiceFiles').replaceChildren();i.files.forEach(f=>extLink($('extInvoiceFiles'),f.name,f.url));extPending=null;extInvoiceDrafts[activeDate]=structuredClone(extInvoice);
 }
+function extSyncInvoiceUnits(){
+ $('extLines').classList.toggle('ext-no-unit',extVal('extSupplier').normalize('NFKC').trim()==='カクヤス'&&extVal('extType')==='delivery');
+}
+$('extSupplier').addEventListener('input',extSyncInvoiceUnits);
+$('extType').addEventListener('change',extSyncInvoiceUnits);
 function extAddLine(value={}){
  const line=document.createElement('div');line.className='ext-line';
  const fields=[['name','品名','text'],['sku','商品コード','text'],['qty','数量','number'],['unit','単位','text'],['price','単価','number'],['amount','明細金額','number']];
  const grid=document.createElement('div');grid.className='ext-fields';
- fields.forEach(([key,label,type])=>{const l=document.createElement('label');l.textContent=label;const e=document.createElement('input');e.type=type;e.dataset.key=key;e.value=value[key]??'';if(type==='number'){e.min='0';e.step='any';}l.append(e);grid.append(l);});
+ fields.forEach(([key,label,type])=>{const l=document.createElement('label');l.textContent=label;if(key==='unit')l.className='ext-unit-field';const e=document.createElement('input');e.type=type;e.dataset.key=key;e.value=value[key]??'';if(type==='number'){e.min='0';e.step='any';}l.append(e);grid.append(l);});
  for(const [key,label,values] of [['category','分類',['食材','飲料','雑費','容器']],['rate','税率',['','0','8','10']]]){
   const l=document.createElement('label');l.textContent=label;const e=document.createElement('select');e.dataset.key=key;extSelect(e,values,value[key]??(key==='category'?'食材':''));l.append(e);grid.append(l);
  }
@@ -787,6 +792,14 @@ function extReviewCell(row,key,value,type='text',options){
  field.oninput=()=>{field.classList.toggle('ext-missing',!['sku','reason'].includes(key)&&field.value==='');extUpdateReviewDifference();};
  td.append(field);row.append(td);
 }
+function extReviewUsesUnit(){
+ return extVal('extReviewSupplier').normalize('NFKC').trim()!=='カクヤス'||extVal('extReviewType')!=='delivery';
+}
+function extSyncReviewUnits(){
+ $('extReceiptDialog').classList.toggle('ext-no-unit',!extReviewUsesUnit());
+}
+$('extReviewSupplier').addEventListener('input',extSyncReviewUnits);
+$('extReviewType').addEventListener('change',extSyncReviewUnits);
 function extReviewAddRow(value={}){
  const entry=extReceiptQueue.find(r=>r.id===extReceiptReviewId);if(!entry)return;
  const tr=document.createElement('tr');
@@ -822,7 +835,7 @@ function extValidateReviewDraft(d,kind){
   if(!Number.isFinite(d.adjustment))throw Error('調整額を確認してください');
   if(d.requiresQuantityReview&&d.lines.some(line=>line.qty===null))throw Error('数量が空欄の明細があります。原本を見て入力してください');
   d.lines.forEach((l,i)=>{
-   if(!String(l.name||'').trim()||!String(l.unit||'').trim()||!extReceiptValidNumber(l.amount))throw Error((i+1)+'行目の品名・単位・金額を確認してください');
+   if(!String(l.name||'').trim()||((d.supplier.normalize('NFKC').trim()!=='カクヤス'||d.type!=='delivery')&&!String(l.unit||'').trim())||!extReceiptValidNumber(l.amount))throw Error((i+1)+'行目の品名・単位・金額を確認してください');
    for(const key of ['qty','price'])if(l[key]!==null&&!extReceiptValidNumber(l[key]))throw Error((i+1)+'行目の数量・単価を確認してください');
    if(l.qty!==null&&l.price!==null&&Math.abs(l.qty*l.price-l.amount)>1&&!String(l.reason||'').trim())throw Error((i+1)+'行目：数量×単価と金額が違います。理由を入力してください');
   });
@@ -860,6 +873,7 @@ function extOpenReceiptReview(id){
  for(const [key,value] of Object.entries({extReviewDate:d.date,extReviewSupplier:d.supplier,extReviewNumber:d.invoiceNumber,extReviewType:d.type??'delivery',
   extReviewTaxMode:d.taxMode??'gross',extReviewTotal:journal?d.total:d.printedTotal,extReviewTax:d.tax,extReviewGroups:d.groups,extReviewPeople:d.guests,
   extReviewAdjustment:d.adjustment||0,extReviewReason:d.reason||''}))extReviewInput(key,value,'text',['extReviewDate','extReviewSupplier','extReviewTotal'].includes(key));
+ extSyncReviewUnits();
  $('extReviewHead').replaceChildren();const head=document.createElement('tr');
  (journal?['決済方法','金額','削除']:['品名','商品コード','数量','単位','単価','金額','分類','税率','差額理由','削除']).forEach(label=>extReceiptText(head,label,'th'));$('extReviewHead').append(head);
  $('extReviewLines').replaceChildren();(journal?d.payments||[]:d.lines||[]).forEach(extReviewAddRow);
