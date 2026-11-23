@@ -130,6 +130,32 @@ async function main(){
  assert.equal(el('tax').value,354);assert.equal(el('guests').value,1);assert.equal(sandbox.current().journalFiles[0],'raw_journal');
  assert.equal(run("extReceiptQueue.find(r=>r.id==='journal_one').status"),'applied');
 
+ // Automatic merging runs when the last page arrives, in either upload order.
+ sandbox.tab='仕入';
+ const previousProcess=sandbox.extProcessReceipt;
+ sandbox.extProcessReceipt=async entry=>{entry.status='ready';};
+ const queue=run('extReceiptQueue');
+ const a=page('auto-one',null),b=page('auto-two',5018);
+ for(const [index,entry] of [a,b].entries()){
+  entry.status='ready';
+  Object.assign(entry.draft,{type:'delivery',taxMode:'monthly',pageNumber:index+1,pageCount:2,invoiceNumber:'auto-001'});
+ }
+ a.draft.lines=[{name:'first'}];
+ b.draft.lines=[{name:'last'}];
+ queue.push(b);
+ await sandbox.extReadReceiptEntries([b]);
+ assert.equal(b.status,'ready');
+ queue.push(a);
+ await sandbox.extReadReceiptEntries([a]);
+ const merged=queue[queue.length-1];
+ assert.equal(merged.status,'ready');
+ assert.equal(merged.draft.printedTotal,5018);
+ assert.equal(merged.draft.lines.map(line=>line.name).join(','),'first,last');
+ assert.equal(a.status,'merged');assert.equal(b.status,'merged');
+ assert.equal(run('extReceiptReviewId'),merged.id);
+ await el('extUnmergeReceipt').onclick();
+ assert.equal(sandbox.extGroupNumberedReceipts([a,b]).length,0);
+ sandbox.extProcessReceipt=previousProcess;
  console.log('Batch UI: table modal, cross-month dates, partial saves, retry IDs, manual grouping, bounded parallelism and journal reflection passed');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

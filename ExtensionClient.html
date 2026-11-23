@@ -267,7 +267,7 @@ function extRenderReceiptQueue(){
   extReceiptText(tr,r.uploads.map(u=>u.file.name).join('、'));
   extReceiptText(tr,r.draft?.date||'未取得');extReceiptText(tr,r.draft?.supplier||'未取得');
   extReceiptText(tr,r.draft?.printedTotal??r.draft?.total??'未取得');
-  extReceiptText(tr,(extReceiptHasNoLines(r)?'明細なし':extReceiptStatuses(r.status))+(r.elapsedMs!=null?' ／ '+(r.elapsedMs/1000).toFixed(1)+'秒':'')+(r.engineLabel?' ／ '+r.engineLabel:'')+(r.cached?'（再読取を省略）':'')+(r.error?'：'+r.error:''));
+  extReceiptText(tr,(r.status==='ready'&&r.draft?.pageCount>1?'全ページを確認':extReceiptHasNoLines(r)?'明細なし':extReceiptStatuses(r.status))+(r.elapsedMs!=null?' ／ '+(r.elapsedMs/1000).toFixed(1)+'秒':'')+(r.engineLabel?' ／ '+r.engineLabel:'')+(r.cached?'（再読取を省略）':'')+(r.error?'：'+r.error:''));
   const cell=extReceiptText(tr,''),button=document.createElement('button');button.type='button';button.textContent=r.status==='saved'?'内容を見る':'確認・修正';
   button.disabled=!r.draft||r.status==='saving';button.onclick=()=>extOpenReceiptReview(r.id);cell.append(button);$('extBatchRows').append(tr);
  });
@@ -599,15 +599,21 @@ async function extReadReceiptEntries(entries){
   await extReceiptPool(entries,async entry=>{
    await extProcessReceipt(entry);completed++;
    $('extBatchProgress').textContent=completed+'／'+entries.length+'件完了 ／ '+((Date.now()-start)/1000).toFixed(1)+'秒。完了した伝票から確認できます。';
-   if(entry.status==='ready'&&!$('extReceiptDialog').open&&completed===1&&
+   if(entry.status==='ready'&&!(entry.draft?.pageCount>1)&&!$('extReceiptDialog').open&&completed===1&&
      ((tab==='売上'&&entry.kind==='journal')||(tab==='仕入'&&entry.kind==='invoice')))extOpenReceiptReview(entry.id);
   });
-  const failed=entries.filter(r=>r.status==='failed').length;
-  const empty=entries.filter(extReceiptHasNoLines).length;
-  const parts=[(entries.length-failed-empty)+'件の候補を取得'];
+  const grouped=extGroupNumberedReceipts(entries);
+  if(grouped.length&&tab==='仕入'&&!$('extReceiptDialog').open)extOpenReceiptReview(grouped[0].id);
+  const remaining=entries.filter(entry=>entry.status!=='merged').concat(grouped);
+  const failed=remaining.filter(r=>r.status==='failed').length;
+  const empty=remaining.filter(entry=>extReceiptHasNoLines(entry)&&!(entry.draft?.pageCount>1)).length;
+  const pending=remaining.filter(entry=>entry.status==='ready'&&entry.draft?.pageCount>1).length;
+  const parts=[(remaining.length-failed-empty-pending)+'件の候補を取得'];
+  if(grouped.length)parts.push(grouped.length+'件をページ順にまとめました');
+  if(pending)parts.push('ページ未確認 '+pending+'枚');
   if(empty)parts.push('明細なし '+empty+'件');
   if(failed)parts.push('読取失敗 '+failed+'件');
-  showStatus('読み取り終了：'+parts.join('、')+'。表で内容を確認してください。',failed||empty?'warning':'success');
+  showStatus('読み取り終了：'+parts.join('、')+'。表で内容を確認してください。',failed||empty||pending?'warning':'success');
  }finally{extReceiptReading=false;extRenderReceiptQueue();}
 }
 $('extInvoiceOcrEngine').onchange=extRenderReceiptQueue;
@@ -769,6 +775,35 @@ function extMergeReceiptModels(entries,id){
  if(totals.length!==1)first.warnings.push('全ページで1回分の合計を入力してください。ページ別合計を自動加算していません。');
  return {id,kind:'invoice',status:'ready',draft:first,uploads:entries.flatMap(r=>r.uploads),sources:entries.flatMap(r=>r.sources),texts:entries.flatMap(r=>r.texts),uploadMonth:entries[0].uploadMonth,components:entries.map(r=>r.id)};
 }
+function extGroupNumberedReceipts(readEntries){
+ const groups=new Map(),merged=[];
+ for(const entry of extReceiptQueue){
+  const d=entry.draft;
+  if(entry.kind!=='invoice'||entry.status!=='ready'||entry.request||entry.manualGrouping||!d||
+   d.type!=='delivery'||!Number.isInteger(d.pageCount)||d.pageCount<2||!d.supplier||!d.date||!d.invoiceNumber)continue;
+  if($('extReceiptDialog').open&&entry.id===extReceiptReviewId)continue;
+  const key=JSON.stringify([d.supplier,d.date,d.invoiceNumber]);
+  if(!groups.has(key))groups.set(key,[]);
+  groups.get(key).push(entry);
+ }
+ const readSet=new Set(readEntries);
+ for(const pages of groups.values()){
+  if(!pages.some(page=>readSet.has(page)))continue;
+  const count=pages[0].draft.pageCount;
+  const numbers=new Set(pages.map(page=>page.draft.pageNumber));
+  if(pages.length!==count||numbers.size!==count||pages.some(page=>{
+   const d=page.draft;
+   return d.pageCount!==count||!Number.isInteger(d.pageNumber)||d.pageNumber<1||d.pageNumber>count;
+  }))continue;
+  const invoice=extMergeReceiptModels(pages,crypto.randomUUID());
+  invoice.draft.warnings=invoice.draft.warnings.filter(message=>!/^このページは \d+\/\d+。/.test(message));
+  invoice.draft.warnings.unshift(count+'枚をページ順にまとめました。原本を切り替えて確認できます。');
+  pages.forEach(page=>{page.status='merged';page.selected=false;});
+  extReceiptQueue.push(invoice);
+  merged.push(invoice);
+ }
+ return merged;
+}
 $('extMergeReceipts').onclick=()=>{
  try{
   if(extReceiptReading)throw Error('読み取り完了後にまとめてください');
@@ -895,7 +930,7 @@ function extCloseReceiptReview(){extSaveReviewDraft();$('extReceiptDialog').clos
 $('extUnmergeReceipt').onclick=()=>{
  const entry=extReceiptQueue.find(r=>r.id===extReceiptReviewId);if(!entry?.components||entry.request||entry.status==='saved')return;
  if(!confirm('まとめたページを元の別々の候補へ戻しますか？ まとめ後の編集内容は引き継ぎません。'))return;
- entry.components.forEach(id=>{const child=extReceiptQueue.find(r=>r.id===id);if(child){child.status='ready';child.selected=false;}});
+ entry.components.forEach(id=>{const child=extReceiptQueue.find(r=>r.id===id);if(child){child.status='ready';child.selected=false;child.manualGrouping=true;}});
  entry.status='merged';$('extReceiptDialog').close();$('extReviewPreview').removeAttribute('src');extRenderReceiptQueue();
 };
 $('extReceiptClose').onclick=extCloseReceiptReview;
