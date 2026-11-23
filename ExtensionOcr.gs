@@ -40,7 +40,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
  if(detected.length===1)supplier=detected[0][0];
  let pageNumber=null,pageCount=null,requiresQuantityReview=false;
  const returnWarnings=[];
- const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[\/年.-](\d{1,2})[\/月.-](\d{1,2})/g)];
+ const compact=text.replace(/\r/g,''),dates=[...compact.matchAll(/(20\d{2}|\d{2})[ \t]*[\/年.-][ \t]*(\d{1,2})[ \t]*[\/月.-][ \t]*(\d{1,2})/g)];
  const first=dates[0],date=first?(first[1].length===2?'20':'')+first[1]+'-'+first[2].padStart(2,'0')+'-'+first[3].padStart(2,'0'):'';
  let total=extLabelNumber_(compact,'合計金額')??extLabelNumber_(compact,'差引合計')??extLabelNumber_(compact,'合計');
  let invoiceNumber='',tax=null,taxMode='monthly',type=/容器回収票/.test(compact)?'return':'delivery';
@@ -173,14 +173,15 @@ function extParseMaruyasuDrive_(text){
  });
  const body=rows.slice(0,end===-1?rows.length:end);
  const table=body.findIndex((row,index)=>/品名.*数量.*単位.*金額/.test(
-  body.slice(Math.max(0,index-8),index+1).join('').replace(/\s/g,'')
+  body.slice(Math.max(0,index-12),index+1).join('').replace(/\s/g,'')
  ));
  const lines=[];
  if(table!==-1){
   for(let index=table+1;index+3<body.length;index++){
-   const [name,quantity,unitPrice,amount]=body.slice(index,index+4);
+   const [name,quantity,unitPrice,amountRow]=body.slice(index,index+4);
+   const amount=amountRow.match(/^(\d+(?:,\d{3})*)(?:[ \t]+[^\n]+)?$/)?.[1];
    const qty=quantity.match(/^(\d+(?:\.\d+)?)[ \t]*(kg|g|ml|l|パ[ \t]*[ッツ][ \t]*ク|束|袋|個|本|枚|箱|玉)$/i);
-   if(!/[\p{L}]/u.test(name)||!qty||!money.test(unitPrice)||!money.test(amount))continue;
+   if(!/[\p{L}]/u.test(name)||!qty||!money.test(unitPrice)||!amount)continue;
    const count=Number(qty[1]),price=extOcrMoney_(unitPrice),value=extOcrMoney_(amount);
    if(!Number.isFinite(count)||count<=0||!Number.isSafeInteger(price)||!Number.isSafeInteger(value)||Math.abs(count*price-value)>1)continue;
    const unit=qty[2].replace(/[ \t]/g,'').replace('パツク','パック');
