@@ -324,6 +324,19 @@ test('Kakuyasu container slips preserve split amounts and deduct once in the pur
  assert.equal(read('ビール空容器中/20\n4バラ\n20\n合計').printedTotal,null);
 });
 
+test('Maruyasu Drive OCR rebuilds split detail lines and preserves the document total only where printed',()=>{
+ const c=harness();
+ const raw='MARUYASU\n0000123456\n(2/2)\n2026年10月6日\n品\n名\n数量\n単位\n金額 摘要\n生椎茸\n1.0 パック\n330\n330\n小松菜\n1.0 束\n220\n220\n毎度お引き立てを賜りありがとうございます。\n合計 ▶\n5,018';
+ const last=c.extParseInvoice_(raw,'');
+ assert.equal(last.pageNumber,2);
+ assert.equal(last.printedTotal,5018);
+ assert.equal(last.lines.map(line=>[line.name,line.qty,line.unit,line.price,line.amount].join('|')).join(';'),'生椎茸|1|パック|330|330;小松菜|1|束|220|220');
+ const first=c.extParseInvoice_(raw.replace('(2/2)','(1/2)').replace('\n5,018',''),'');
+ assert.equal(first.printedTotal,null);
+ assert.equal(first.lines.length,2);
+ assert.equal(c.extParseInvoice_(raw.replace('220\n220','220\n2211'),'').lines.length,1);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

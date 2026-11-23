@@ -118,6 +118,11 @@ function extParseInvoice_(text,supplier,rowText,crops){
   lines.push(...extParseKakuyasuWrappedRows_(crops.items));
   requiresQuantityReview=lines.length>0;
  }
+ if(typeof rowText!=='string'&&supplier==='maruyasu'){
+  const drive=extParseMaruyasuDrive_(compact);
+  if(!lines.length)lines.push(...drive.lines);
+  if(drive.total!==null)total=drive.total;
+ }
  if(typeof rowText!=='string'&&supplier==='カクヤス'&&type==='delivery'){
   const drive=extParseKakuyasuDrive_(compact);
   if(!lines.length)lines.push(...drive.lines);
@@ -152,6 +157,38 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
   return [{name:name.trim(),sku:'',qty:values[0],unit:unit||'',price:values[1],amount:values[2],
    rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''}];
  });
+}
+
+function extParseMaruyasuDrive_(text){
+ const rows=text.split(/\r?\n/).map(row=>row.trim().replace(/,(?=[ \t]+\d{3}\b)[ \t]+/g,',')).filter(Boolean);
+ const money=/^\d+(?:,\d{3})*$/;
+ const totalLabel=/^合[ \t]*計[ \t]*(?:[▶▸►▷▹>›→:]?[ \t]*)(?:(\d+(?:,\d{3})*)[ \t]*円?)?$/;
+ const end=rows.findIndex(row=>totalLabel.test(row));
+ const totals=new Set();
+ rows.forEach((row,index)=>{
+  const match=row.match(totalLabel);
+  if(!match) return;
+  const value=match[1]||rows[index+1];
+  if(money.test(value||''))totals.add(extOcrMoney_(value));
+ });
+ const body=rows.slice(0,end===-1?rows.length:end);
+ const table=body.findIndex((row,index)=>/品名.*数量.*単位.*金額/.test(
+  body.slice(Math.max(0,index-8),index+1).join('').replace(/\s/g,'')
+ ));
+ const lines=[];
+ if(table!==-1){
+  for(let index=table+1;index+3<body.length;index++){
+   const [name,quantity,unitPrice,amount]=body.slice(index,index+4);
+   const qty=quantity.match(/^(\d+(?:\.\d+)?)[ \t]*(kg|g|ml|l|パ[ \t]*[ッツ][ \t]*ク|束|袋|個|本|枚|箱|玉)$/i);
+   if(!/[\p{L}]/u.test(name)||!qty||!money.test(unitPrice)||!money.test(amount))continue;
+   const count=Number(qty[1]),price=extOcrMoney_(unitPrice),value=extOcrMoney_(amount);
+   if(!Number.isFinite(count)||count<=0||!Number.isSafeInteger(price)||!Number.isSafeInteger(value)||Math.abs(count*price-value)>1)continue;
+   const unit=qty[2].replace(/[ \t]/g,'').replace('パツク','パック');
+   lines.push({name,sku:'',qty:count,unit,price,amount:value,rate:'',category:'食材',reason:''});
+   index+=3;
+  }
+ }
+ return {lines,total:totals.size===1?[...totals][0]:null};
 }
 
 function extParseKakuyasuReturn_(text){
