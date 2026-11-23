@@ -239,6 +239,17 @@ test('Drive OCR split Kakuyasu columns produce a reconciled item and a labeled t
  assert.equal(c.extParseInvoice_(text.replace('20\n3\n','20\n'),'').lines.length,0);
 });
 
+test('Kakuyasu Drive OCR handles a missing price label and a stray header mark',()=>{
+ const c=harness();
+ const text='カクヤス\n日付 倉庫 区分 122 26/10/24\n伝票 No.\nO\n83701234\n26/10/24\nコード\n商品名\n規格\n税区\n入数 ケース数\nバラ数\n金額\n33-00-23-06\nテスト米焼酎 342710 25°\n720ML\n外 10%\n12\n2\n1,250\n2,500\n摘要\n合計\n2,500';
+ const result=c.extParseInvoice_(text,'');
+ assert.equal(result.date,'2026-10-24');
+ assert.equal(result.invoiceNumber,'83701234');
+ assert.equal(result.printedTotal,2500);
+ const [line]=result.lines;
+ assert.deepEqual([line.qty,line.unit,line.price,line.amount,line.rate],[2,'',1250,2500,10]);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

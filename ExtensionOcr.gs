@@ -53,6 +53,10 @@ function extParseInvoice_(text,supplier,rowText,crops){
   const m=compact.match(/(?:伝票\s*N[oO][.．:]?|No[.．]?)\s*(\d+)/);invoiceNumber=m?m[1]:'';
   if(type==='delivery'){
    if(!invoiceNumber){
+    const splitNumber=compact.match(/^[ \t]*伝[ \t]*票[ \t]*No\.?[ \t]*\n(?:[ \t]*[O○◎][ \t]*\n)?[ \t]*(\d{8})[ \t]*$/im);
+    invoiceNumber=splitNumber?.[1]||'';
+   }
+   if(!invoiceNumber){
     // The printed header and its values often arrive on separate OCR lines.
     const header=/日[ \t]*付[^\n]*伝[ \t]*票[ \t]*No\.?[^\n]*\n[^\n]*?[ \t|]?(\d{2,4}\/\d{1,2}\/\d{1,2})(?:[ \t|]+\d{1,4}){0,2}[ \t|]+(\d{8})[ \t|]+\1(?:[ \t|]|$)/im;
     const numbers=[...new Set([compact,aligned].map(source=>source.match(header)?.[2]).filter(Boolean))];
@@ -152,7 +156,7 @@ function extParseKakuyasuDrive_(text){
  const footer=rows.findIndex((row,index)=>index>first&&/^摘\s*要|^(?:売上|差引)?合\s*計(?:$|[ \t])/.test(row));
  const body=rows.slice(first,footer===-1?rows.length:footer);
  const lines=[];
- if(/商品名.*ケース数.*バラ数.*単価.*金額/.test(heading)){
+ if(/商品名.*税区.*入数.*ケース数.*バラ数.*金額/.test(heading)){
   const starts=body.flatMap((row,index)=>code.test(row)?[index]:[]);
   for(const [number,index] of starts.entries()){
    const item=body.slice(index+1,starts[number+1]);
