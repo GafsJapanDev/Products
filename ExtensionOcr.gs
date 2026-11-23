@@ -118,6 +118,11 @@ function extParseInvoice_(text,supplier,rowText,crops){
   lines.push(...extParseKakuyasuWrappedRows_(crops.items));
   requiresQuantityReview=lines.length>0;
  }
+ if(typeof rowText!=='string'&&supplier==='プレコフーズ'&&type==='delivery'){
+  const drive=extParsePrecoDrive_(compact);
+  if(drive.total!==null){total=drive.total;tax=drive.tax;}
+  if(!lines.length)lines.push(...drive.lines);
+ }
  if(typeof rowText!=='string'&&supplier==='maruyasu'){
   const drive=extParseMaruyasuDrive_(compact);
   if(!lines.length)lines.push(...drive.lines);
@@ -157,6 +162,38 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
   return [{name:name.trim(),sku:'',qty:values[0],unit:unit||'',price:values[1],amount:values[2],
    rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''}];
  });
+}
+
+function extParsePrecoDrive_(text){
+ const rows=text.split(/\r?\n/).map(row=>row.trim().replace(/,(?=[ \t]+\d{3}\b)[ \t]+/g,',')).filter(Boolean);
+ const money=/^\d+(?:,\d{3})*$/;
+ const valuesAfter=label=>{
+  const values=new Set();
+  for(const [index,row] of rows.entries()){
+   if(!label.test(row))continue;
+   const next=rows.slice(index+1,index+5).find(value=>!/^[-−―ー]+$|^[【(]?(?:8|10)\s*%対象[)】]?$/.test(value));
+   if(money.test(next||''))values.add(extOcrMoney_(next));
+  }
+  return values.size===1?[...values][0]:null;
+ };
+ const total=valuesAfter(/^納\s*品\s*額$/),tax=valuesAfter(/^消\s*費\s*[税稅]$/);
+ const gross=valuesAfter(/^合\s*計\s*金\s*額$/);
+ if(total===null||tax===null||gross===null||total+tax!==gross)return {total:null,tax:null,lines:[]};
+
+ const heading=rows.findIndex((row,index)=>row==='コード'&&rows.slice(index+1,index+3).join('').replace(/\s/g,'')==='品名');
+ const footer=rows.findIndex(row=>/^合\s*計\s*金\s*額$/.test(row));
+ const body=heading>=0&&footer>heading?rows.slice(heading+3,footer):[];
+ const codes=body.flatMap((row,index)=>/^\d{5}$/.test(row)&&/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(body[index+1]||'')?[index]:[]);
+ if(codes.length!==1)return {total,tax,lines:[]};
+ const index=codes[0],name=body[index+1],sku=body[index];
+ const itemAmount=money.test(body[index+2]||'')?extOcrMoney_(body[index+2]):null;
+ const quantities=[...new Set(body.flatMap((row,index)=>/^数$/.test(row)&&body[index+2]==='量'&&/^\d+(?:\.\d+)?$/.test(body[index+1])?[Number(body[index+1])]:[]))];
+ const prices=body.flatMap((row,index)=>/^(?:kg|g|個|本|袋|パック)$/i.test(row)&&money.test(body[index+1]||'')?
+  [{unit:row.toLowerCase(),price:extOcrMoney_(body[index+1])}]:[]);
+ if(itemAmount!==total||quantities.length!==1||prices.length!==1||quantities[0]<=0||quantities[0]*prices[0].price!==itemAmount)return {total,tax,lines:[]};
+ const [{unit,price}]=prices;
+ const reduced=body[index+3]==='*'&&/\*印は軽減税率対象商品/.test(text);
+ return {total,tax,lines:[{name,sku,qty:quantities[0],unit,price,amount:itemAmount,rate:reduced?8:'',category:'食材',reason:''}]};
 }
 
 function extParseMaruyasuDrive_(text){

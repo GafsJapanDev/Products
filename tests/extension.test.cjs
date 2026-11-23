@@ -371,6 +371,25 @@ test('Maruyasu pages preserve spaced dates, inline remarks, and the final total'
  assert.equal(saved.lines[14].unit,'束');
 });
 
+test('Preco split OCR reconciles the item, net subtotal, tax, and gross total',()=>{
+ const c=harness();
+ const text=[
+  '2026年 10月 19日 コード:061627-061628','納品書','コード','品','名','03000','鳥もも正肉 (外国産/冷凍)','1,780','*',
+  '伝票 NO.006580000','PRECO','量k','单','価','kg','890','期','金額','1,780','数','2','量','142','1,922','-',
+  '合計金額','-','8%対象)','1,922','納品額','8%対象)','-','1,780','値引','8%対象)','*印は軽減税率対象商品',
+  '1','消費稅','【8%対象)','142'
+ ].join('\n');
+ const parse=text=>c.extParseInvoice_(text,'');
+ const draft=parse(text);
+ assert.deepEqual([draft.date,draft.invoiceNumber,draft.printedTotal,draft.tax,draft.taxMode],['2026-10-19','006580000',1780,142,'net']);
+ const [line]=draft.lines;
+ assert.deepEqual([line.sku,line.qty,line.unit,line.price,line.amount,line.rate],['03000',2,'kg',890,1780,8]);
+ const saved=c.saveExtensionInvoice(invoiceInput(c,draft)).invoice;
+ assert.equal(saved.total,1922);
+ assert.equal(parse(text.replace('数\n2\n量','数\n3\n量')).lines.length,0);
+ assert.equal(parse(text.replace('【8%対象)\n142','【8%対象)\n145')).lines.length,0);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};
