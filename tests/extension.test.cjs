@@ -339,18 +339,22 @@ test('Maruyasu Drive OCR rebuilds split detail lines and preserves the document 
 
 test('Maruyasu pages preserve spaced dates, inline remarks, and the final total',()=>{
  const c=harness(),heading='MARUYASU\n0000123456\n';
- const columns='品\n名\n数量\n単位\n単価\nFOODS MARUYASU\n丸安商店 金額\n摘要\n';
+ const columns='品\n名\n数量\n单位\n単価\nFOODS MARUYASU\n丸安商店 金額\n摘要\n';
  const items=[
   ['1.0 パック',330,'330 5本いり'],['2.0 パック',380,760],['2.0 パック',195,390],['2.0 束',130,260],
-  ['3.0 パック',350,'1,050'],['2.0 パック',115,230],['0.3 kg',280,84],['1.1 kg',295,324],
+  ['3.0 パック',350,'1,050'],['2.0 バック',115,230],['0.3kg',280,84],['1.1 kg',295,324],
   ['1.0 パック',145,145],['1.0 本',85,85],['1.0 袋',180,180],['1.0 パック',450,450],['2.0 個',90,180]
  ].map((item,index)=>['試験品'+(index+1),...item].join('\n')).join('\n');
  const first=c.extParseInvoice_(heading+'(1/2)\n2026年10月 6日\n'+columns+items+'\n合 計 ▶','');
- const last=c.extParseInvoice_(heading+'(2/2)\n2026年10月6日\n'+columns+'試験茸\n1.0 パック\n330\n330\n試験菜\n1.0 束\n220\n220\n合計 ▶\n5,018','');
+ const last=c.extParseInvoice_(heading+'(2/2)\n2026年10月6日\n'+columns+'試験茸\n1.0 八唦\n330\n330\n試験菜\n1.0 束\n220\n220\n合計 ▶\n5,018','');
  assert.equal(first.date,last.date);
  assert.equal(first.date,'2026-10-06');
  assert.equal(first.lines.length,13);
  assert.equal(last.lines.length,2);
+ assert.equal(first.lines[5].unit,'パック');
+ assert.equal(first.lines[6].unit,'kg');
+ assert.equal(last.lines[0].unit,'');
+ assert.equal(last.lines[0].qty,1);
  assert.equal(first.printedTotal,null);
  assert.equal(last.printedTotal,5018);
  assert.equal([...first.lines,...last.lines].reduce((sum,line)=>sum+line.amount,0),5018);

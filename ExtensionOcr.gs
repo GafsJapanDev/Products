@@ -121,6 +121,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
  if(typeof rowText!=='string'&&supplier==='maruyasu'){
   const drive=extParseMaruyasuDrive_(compact);
   if(!lines.length)lines.push(...drive.lines);
+  if(drive.lines.some(line=>!line.unit))returnWarnings.push('単位を読み取れない明細があります。原本を見て単位を入力してください。');
   if(drive.total!==null)total=drive.total;
  }
  if(typeof rowText!=='string'&&supplier==='カクヤス'&&type==='delivery'){
@@ -172,7 +173,7 @@ function extParseMaruyasuDrive_(text){
   if(money.test(value||''))totals.add(extOcrMoney_(value));
  });
  const body=rows.slice(0,end===-1?rows.length:end);
- const table=body.findIndex((row,index)=>/品名.*数量.*単位.*金額/.test(
+ const table=body.findIndex((row,index)=>/品名.*数量.*[単单]位.*金額/.test(
   body.slice(Math.max(0,index-12),index+1).join('').replace(/\s/g,'')
  ));
  const lines=[];
@@ -180,11 +181,12 @@ function extParseMaruyasuDrive_(text){
   for(let index=table+1;index+3<body.length;index++){
    const [name,quantity,unitPrice,amountRow]=body.slice(index,index+4);
    const amount=amountRow.match(/^(\d+(?:,\d{3})*)(?:[ \t]+[^\n]+)?$/)?.[1];
-   const qty=quantity.match(/^(\d+(?:\.\d+)?)[ \t]*(kg|g|ml|l|パ[ \t]*[ッツ][ \t]*ク|束|袋|個|本|枚|箱|玉)$/i);
+   const qty=quantity.match(/^(\d+(?:\.\d+)?)[ \t]*([^\d\r\n]{1,12})$/);
    if(!/[\p{L}]/u.test(name)||!qty||!money.test(unitPrice)||!amount)continue;
    const count=Number(qty[1]),price=extOcrMoney_(unitPrice),value=extOcrMoney_(amount);
    if(!Number.isFinite(count)||count<=0||!Number.isSafeInteger(price)||!Number.isSafeInteger(value)||Math.abs(count*price-value)>1)continue;
-   const unit=qty[2].replace(/[ \t]/g,'').replace('パツク','パック');
+   const recognizedUnit=qty[2].replace(/[ \t]/g,'').replace(/^[パバ][ッツ]ク$/,'パック').toLowerCase();
+   const unit=/^(?:kg|g|ml|l|パック|束|袋|個|本|枚|箱|玉)$/.test(recognizedUnit)?recognizedUnit:'';
    lines.push({name,sku:'',qty:count,unit,price,amount:value,rate:'',category:'食材',reason:''});
    index+=3;
   }
