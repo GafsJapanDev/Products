@@ -311,6 +311,13 @@ test('Kakuyasu container slips preserve split amounts and deduct once in the pur
  assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount,line.category],['ビール空容器中/20',4,'',null,20,'容器']);
  const saved=c.saveExtensionInvoice(invoiceInput(c,draft)).invoice;
  assert.equal(c.extInvoiceBuckets_(saved).容器,-20);
+ const daily=Array.from({length:31},()=>Array(9).fill(0));
+ daily[18][7]=1000;
+ daily[19][7]=500;
+ daily[18][6]=300;
+ const book={getSheetByName:()=>({getRange:()=>({setValues(){}})})};
+ c.extOverlayPurchases_(book,'2026-10',daily);
+ assert.deepEqual([daily[18][7],daily[19][7],daily[18][6]],[980,500,300]);
  const multiple=read('ビール空容器小/30\n1バラ 5\nビール空容器中/20\n2バラ\n10\n合 計 15');
  assert.deepEqual(multiple.lines.map(line=>line.amount).join(','),'5,10');
  assert.equal(multiple.printedTotal,15);
