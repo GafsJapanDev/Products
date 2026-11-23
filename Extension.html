@@ -26,6 +26,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 #extReviewGuests[hidden]{display:none}
 #extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(4),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(4){display:none}
 #extLines.ext-no-unit .ext-unit-field{display:none}
+#extOcrRotationLabel[hidden]{display:none}
 </style>
 <div class="ext-badge">拡張テスト版 ／ LINE送信停止中</div>
 <div id="extInvoicePanel" hidden>
@@ -54,12 +55,12 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <label id="extOcrSupplierLabel">仕入先（不明なら空欄・伝票ごとに修正できます）<input id="extOcrSupplier" list="extSuppliers"></label>
  <label id="extInvoiceOcrEngineLabel">写真の読み取り方法
   <select id="extInvoiceOcrEngine">
-   <option value="browser">新しい読み取り（Tesseract.js）</option>
-   <option value="drive">従来の読み取り（Google Drive）</option>
+   <option value="drive" selected>Google Drive OCR</option>
+   <option value="browser">Tesseract.js（比較テスト用）</option>
   </select>
-  <small>JPEG・PNGで比較できます。PDFは従来の読み取りを使用します。</small>
+  <small>PDFはGoogle Drive OCRを使用します。</small>
  </label>
- <label id="extOcrRotationLabel">写真の向き（新しい読み取りのみ）
+ <label id="extOcrRotationLabel">写真の向き（Tesseract.jsのみ）
   <select id="extOcrRotation">
    <option value="auto">自動（写真ごとに判定）</option>
    <option value="0">そのまま</option>

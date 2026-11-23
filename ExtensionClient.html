@@ -52,7 +52,6 @@ render=function(){
   $('extOcrHeading').textContent=kind==='journal'?'売上ジャーナルを読み取る':'納品伝票を読み取る';
   $('extOcrSupplierLabel').hidden=kind==='journal';
   $('extInvoiceOcrEngineLabel').hidden=kind==='journal';
-  $('extOcrRotationLabel').hidden=kind==='journal';
   $('extInvoiceCapture').hidden=kind==='journal';
   $(tab==='売上'?'extJournalOcrHost':'extPurchaseOcrHost').append($('extOcrPanel'));
  }
@@ -260,6 +259,7 @@ function extReceiptHasNoLines(entry){
 }
 function extRenderReceiptQueue(){
  const kind=extReceiptKind(),rows=extReceiptQueue.filter(r=>r.kind===kind&&r.status!=='merged');
+ $('extOcrRotationLabel').hidden=kind==='journal'||extVal('extInvoiceOcrEngine')!=='browser';
  $('extBatchRows').replaceChildren();
  rows.forEach(r=>{
   const tr=document.createElement('tr'),check=extReceiptText(tr,'');
@@ -573,7 +573,7 @@ async function extProcessReceipt(entry){
    }
    let recognized;
    try{recognized=await extReadBrowserInvoice(upload.file,entry.rotation,entry.supplier);}
-   catch(_){throw Error('新しい読み取りに失敗しました。従来の読み取りに切り替えて再試行できます');}
+   catch(_){throw Error('Tesseract.jsでの読み取りに失敗しました。Google Drive OCRに切り替えて再試行できます');}
    const {rotation,...text}=recognized;
    result=await rpc('parseExtensionBrowserInvoice',{...text,fileId:entry.sources[0].id,supplier:entry.supplier});
    const direction={0:'回転なし','-90':'左90°',90:'右90°',180:'180°'}[rotation];
