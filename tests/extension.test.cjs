@@ -250,6 +250,30 @@ test('Kakuyasu Drive OCR handles a missing price label and a stray header mark',
  assert.deepEqual([line.qty,line.unit,line.price,line.amount,line.rate],[2,'',1250,2500,10]);
 });
 
+test('Kakuyasu Drive OCR recovers three items when headings interrupt the first item',()=>{
+ const c=harness();
+ const text=[
+  '納品書','株式会社 カクヤス','日付 倉庫 区分','伝票 No.','26/10/27','122','83700001','26/10/27','122032 0 B1回 23:13','PK',
+  'コード','33-00-16-05','商 品 名 テスト トニックウォーターペット','規格','税区','入数 ケース数 バラ数','单','価','金額',
+  '500ML','外8%','24','5','163','815','445153',
+  '22-05-02-01','テスト 強炭酸水 500MLペット','500ML','外8%','24','3','74','222','236400',
+  '22-01-02-01','テスト 緑茶 2L ペット','2L]','外8%','6','1','151','151','224225',
+  '摘要','容器','数量','金額','売上合計','1, 188','ビール','消費税','函','ジュース','合 計 差引合計','1, 188','対象額','合計'
+ ].join('\n');
+ const parse=value=>c.extParseInvoice_(value,'');
+ const result=parse(text);
+ assert.equal(result.date,'2026-10-27');
+ assert.equal(result.invoiceNumber,'83700001');
+ assert.equal(result.printedTotal,1188);
+ assert.deepEqual(JSON.parse(JSON.stringify(result.lines.map(({name,sku,qty,unit,price,amount,rate})=>[name,sku,qty,unit,price,amount,rate]))),[
+  ['テスト トニックウォーターペット','445153',5,'',163,815,8],
+  ['テスト 強炭酸水 500MLペット','236400',3,'',74,222,8],
+  ['テスト 緑茶 2L ペット','224225',1,'',151,151,8]
+ ]);
+ assert.equal(parse(text.replace('5\n163\n815','5\n163\n816')).lines.length,2);
+ assert.equal(parse(text.replace('売上合計\n1, 188','売上合計\n1, 188\n売上合計\n1, 189')).printedTotal,null);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

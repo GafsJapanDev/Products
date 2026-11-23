@@ -52,9 +52,11 @@ function extParseInvoice_(text,supplier,rowText,crops){
   taxMode='monthly';
   const m=compact.match(/(?:伝票\s*N[oO][.．:]?|No[.．]?)\s*(\d+)/);invoiceNumber=m?m[1]:'';
   if(type==='delivery'){
+   if(!/^\d{8}$/.test(invoiceNumber))invoiceNumber='';
    if(!invoiceNumber){
     const splitNumber=compact.match(/^[ \t]*伝[ \t]*票[ \t]*No\.?[ \t]*\n(?:[ \t]*[O○◎][ \t]*\n)?[ \t]*(\d{8})[ \t]*$/im);
-    invoiceNumber=splitNumber?.[1]||'';
+    const separated=compact.match(/^[ \t]*伝[ \t]*票[ \t]*No\.?[ \t]*\n[ \t]*(\d{2,4}\/\d{1,2}\/\d{1,2})[ \t]*\n[ \t]*\d{1,4}[ \t]*\n[ \t]*(\d{8})[ \t]*\n[ \t]*\1[ \t]*$/im);
+    invoiceNumber=splitNumber?.[1]||separated?.[2]||'';
    }
    if(!invoiceNumber){
     // The printed header and its values often arrive on separate OCR lines.
@@ -147,30 +149,36 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
 }
 
 function extParseKakuyasuDrive_(text){
- const rows=text.split(/\r?\n/).map(row=>row.trim()).filter(Boolean);
+ const rows=text.split(/\r?\n/).map(row=>row.trim().replace(/,(?=[ \t]+\d{3}(?:\D|$))[ \t]+/g,',')).filter(Boolean);
  const code=/^\d{2}(?:-\d{2}){3}$/;
  const amount=/^\d+(?:,\d{3})*$/;
  const first=rows.findIndex(row=>code.test(row));
  if(first===-1)return {lines:[],total:null};
- const heading=rows.slice(Math.max(0,first-12),first).join('').replace(/\s/g,'');
- const footer=rows.findIndex((row,index)=>index>first&&/^摘\s*要|^(?:売上|差引)?合\s*計(?:$|[ \t])/.test(row));
+ const heading=rows.slice(Math.max(0,first-12),first+10).join('').replace(/\s/g,'');
+ const footer=rows.findIndex((row,index)=>index>first&&/^(?:摘\s*要|(?:売上|差引)?合\s*計(?:$|[ \t]))/.test(row));
  const body=rows.slice(first,footer===-1?rows.length:footer);
  const lines=[];
  if(/商品名.*税区.*入数.*ケース数.*バラ数.*金額/.test(heading)){
   const starts=body.flatMap((row,index)=>code.test(row)?[index]:[]);
   for(const [number,index] of starts.entries()){
    const item=body.slice(index+1,starts[number+1]);
-   const [name]=item;
+   const name=item[0]?.replace(/^商\s*品\s*名\s+/,'');
    const taxIndex=item.findIndex(row=>/^(?:[外内][ \t]*)?(?:[0-9A-Za-z-]+)[ \t]*%$/.test(row));
    if(!name||!/[\p{L}]/u.test(name)||taxIndex<2)continue;
    const values=item.slice(taxIndex+1);
-   if(![4,5].includes(values.length)||!values.every(value=>amount.test(value)))continue;
-   const [qty,price,lineAmount]=values.slice(-3).map(extOcrMoney_);
-   // A blank case column may be omitted by OCR. Require the final three printed values to reconcile.
-   if(![qty,price,lineAmount].every(Number.isSafeInteger)||qty<=0||price<=0||qty*price!==lineAmount)continue;
-   // Only interpret the percent token already identified within this item's tax field.
+   const numeric=count=>{
+    if(![4,5].includes(count.length)||!count.every(value=>amount.test(value)))return null;
+    const [qty,price,lineAmount]=count.slice(-3).map(extOcrMoney_);
+    return [qty,price,lineAmount].every(Number.isSafeInteger)&&qty>0&&price>0&&qty*price===lineAmount
+     ?[qty,price,lineAmount]:null;
+   };
+   const last=values[values.length-1]||'';
+   const trailingSku=/^\d{5,8}$/.test(last)?last:'';
+   const full=numeric(values),withoutSku=trailingSku?numeric(values.slice(0,-1)):null;
+   if(Boolean(full)===Boolean(withoutSku))continue;
+   const [qty,price,lineAmount]=full||withoutSku;
    const tax=item[taxIndex].match(/^(?:(?:外|内)\s*|[0-9A-Za-z]+-\s*)?(8|10)\s*%$/);
-   lines.push({name,sku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:'飲料',reason:''});
+   lines.push({name,sku:withoutSku?trailingSku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:'飲料',reason:''});
   }
  }
  const totals=new Map();
