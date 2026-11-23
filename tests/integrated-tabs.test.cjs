@@ -77,6 +77,12 @@ async function main(){
  lastPage.draft.type='return';
  assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,lastPage],'mixed'),/容器回収票/);
  const word=(text,x,y,width=12)=>({text,bbox:{x0:x,y0:y,x1:x+width,y1:y+12}});
+ const dateData={blocks:[{paragraphs:[{lines:[{words:[
+  word('26/10/31',694,304,32),word('26/10/31',800,304,32)
+ ]}]}]}]};
+ const dateOffset=sandbox.extKakuyasuDateOffset(dateData,1000,1000);
+ assert.ok(Math.abs(dateOffset.x-0.04)<0.001&&Math.abs(dateOffset.y-0.03)<0.001);
+ assert.equal(sandbox.extKakuyasuDateOffset(dateData,1000,400),null);
  const fields=sandbox.extKakuyasuFields({blocks:[{paragraphs:[{lines:[{words:[
   word('商品',100,40),word('名',113,40),word('規格',200,40),
   word('バラ',350,40),word('数',363,40),word('単価',410,40),

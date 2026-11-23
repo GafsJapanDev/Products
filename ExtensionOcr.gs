@@ -60,7 +60,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
    }
    for(const source of [crops?.totals,aligned]){
     if(!source)continue;
-    const totals=[...source.normalize('NFKC').matchAll(/^[ \t]*(差引|売上)?合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/gm)];
+    const totals=[...source.normalize('NFKC').matchAll(/^[ \t|│]*(差引|売上)?合[ \t]*計[ \t|│]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t|│]*$/gm)];
     const printed=['差引',undefined,'売上'].map(label=>totals.filter(candidate=>candidate[1]===label)).find(matches=>matches.length);
     if(!printed)continue;
     if(printed.length===1)total=extOcrMoney_(printed[0][2]);

@@ -349,6 +349,77 @@ function extKakuyasuFields(data){
  return fields.slice(0,20);
 }
 
+function extKakuyasuDateOffset(data,width,height){
+ const lines=(data.blocks||[]).flatMap(block=>block.paragraphs.flatMap(paragraph=>paragraph.lines));
+ const dates=lines.flatMap(line=>(line.words||[]).flatMap(word=>{
+  const match=word.text.normalize('NFKC').match(/^(?:20)?(\d{2})\/(\d{1,2})\/(\d{1,2})$/);
+  if(!match)return [];
+  const [,year,month,day]=match;
+  const date=new Date(Date.UTC(2000+Number(year),Number(month)-1,Number(day)));
+  if(date.getUTCMonth()+1!==Number(month)||date.getUTCDate()!==Number(day))return [];
+  const x=(word.bbox.x0+word.bbox.x1)/2/width,y=(word.bbox.y0+word.bbox.y1)/2/height;
+  return x>=0.54&&x<=0.84&&y>=0.19&&y<=0.39?[{x,y,date:date.toISOString()}]:[];
+ }));
+ if(new Set(dates.map(anchor=>anchor.date)).size!==1)return null;
+ const anchor=dates.sort((a,b)=>a.x-b.x)[0];
+ return {x:Math.max(-0.10,Math.min(0.10,anchor.x-0.67)),y:Math.max(-0.10,Math.min(0.10,anchor.y-0.28))};
+}
+
+function extKakuyasuCleanImage(source){
+ const canvas=document.createElement('canvas');
+ const width=canvas.width=source.width,height=canvas.height=source.height;
+ const context=canvas.getContext('2d',{willReadFrequently:true});
+ context.drawImage(source,0,0);
+ const image=context.getImageData(0,0,width,height),pixels=image.data;
+ const stride=width+1,integral=new Uint32Array(stride*(height+1));
+ const gray=new Uint8Array(width*height),ink=new Uint8Array(gray.length);
+ for(let y=0;y<height;y++){
+  let row=0;
+  for(let x=0;x<width;x++){
+   const offset=y*width+x,pixel=offset*4;
+   gray[offset]=(77*pixels[pixel]+150*pixels[pixel+1]+29*pixels[pixel+2])>>8;
+   row+=gray[offset];
+   integral[(y+1)*stride+x+1]=integral[y*stride+x+1]+row;
+  }
+ }
+ const radius=Math.max(8,Math.round(width/85));
+ for(let y=0;y<height;y++){
+  const top=Math.max(0,y-radius),bottom=Math.min(height,y+radius+1);
+  for(let x=0;x<width;x++){
+   const left=Math.max(0,x-radius),right=Math.min(width,x+radius+1);
+   const sum=integral[bottom*stride+right]-integral[top*stride+right]-
+    integral[bottom*stride+left]+integral[top*stride+left];
+   const background=sum/((right-left)*(bottom-top));
+   const offset=y*width+x;
+   ink[offset]=gray[offset]+Math.max(12,background*0.10)<background?1:0;
+  }
+ }
+ const lines=new Uint8Array(ink.length);
+ // Flag straight rules much longer than text strokes. Use the original mask for both axes.
+ for(const [length,count,step,lineStep,minimum] of [
+  [width,height,1,width,Math.round(width*0.16)],
+  [height,width,width,1,Math.round(height*0.10)]
+ ]){
+  for(let line=0;line<count;line++){
+   const origin=line*lineStep;
+   let start=0;
+   for(let index=0;index<=length;index++){
+    if(index<length&&ink[origin+index*step])continue;
+    if(index-start>=minimum){
+     for(let run=start;run<index;run++)lines[origin+run*step]=1;
+    }
+    start=index+1;
+   }
+  }
+ }
+ for(let index=0;index<ink.length;index++){
+  const value=ink[index]&&!lines[index]?0:255,pixel=index*4;
+  pixels[pixel]=pixels[pixel+1]=pixels[pixel+2]=value;
+ }
+ context.putImageData(image,0,0);
+ return canvas;
+}
+
 function extKakuyasuDeskew(canvas){
  const sample=document.createElement('canvas');
  sample.width=420;
@@ -435,18 +506,26 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
     draw(best.angle);
     const deskew=extKakuyasuDeskew(canvas);
     if(deskew)draw(best.angle,deskew);
+    const clean=extKakuyasuCleanImage(canvas);
     // Use wide regions to allow for margins and small shifts in smartphone photos.
     const readRegion=async(left,top,right,bottom,alignWords=false)=>{
      const x=Math.floor(canvas.width*left),y=Math.floor(canvas.height*top);
      const rectangle={left:x,top:y,width:Math.floor(canvas.width*right)-x,height:Math.floor(canvas.height*bottom)-y};
-     const {data}=await worker.recognize(canvas,{rectangle},{text:true,blocks:true});
+     const {data}=await worker.recognize(clean,{rectangle},{text:true,blocks:true});
      return alignWords?data:extBrowserOcrRows(data);
     };
     try{
      await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SPARSE_TEXT});
      const table=await readRegion(0.07,0.24,0.98,0.77,true);
      const items=extBrowserOcrRows(table,true);
-     if(!timedOut)crops={items,totals:await readRegion(0.60,0.57,0.99,0.95),cells:[]};
+     if(!timedOut){
+      const offset=extKakuyasuDateOffset(best.data,canvas.width,canvas.height);
+      const anchored=offset?await readRegion(0.62+offset.x,0.60+offset.y,
+       Math.min(1,0.99+offset.x),Math.min(1,0.96+offset.y)):'';
+      const hasTotal=/合[ \t]*計[ \t|]+[¥￥]?[ \t]*[0-9０-９]/.test(anchored.normalize('NFKC'));
+      const totals=hasTotal||timedOut?anchored:await readRegion(0.60,0.57,0.99,0.95);
+      crops={items,totals,cells:[]};
+     }
      const candidates=extKakuyasuFields(table);
      if(crops&&candidates.length){
       await worker.setParameters({tessedit_pageseg_mode:engine.PSM.SINGLE_WORD,tessedit_char_whitelist:'0123456789'});
@@ -454,7 +533,7 @@ async function extReadBrowserInvoice(file,rotation='auto',supplier=''){
        if(timedOut)break;
        const rectangle={left,top,width:Math.min(right,canvas.width)-left,height:Math.min(bottom,canvas.height)-top};
        if(rectangle.width<1||rectangle.height<1)continue;
-       const {data}=await worker.recognize(canvas,{rectangle},{text:true});
+       const {data}=await worker.recognize(clean,{rectangle},{text:true});
        const qty=data.text.trim();
        crops.cells.push({name,price,amount,qty:/^\d+$/.test(qty)?qty:''});
       }
