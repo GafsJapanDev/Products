@@ -157,14 +157,15 @@ function extParseKakuyasuDrive_(text){
   for(const [number,index] of starts.entries()){
    const item=body.slice(index+1,starts[number+1]);
    const [name]=item;
-   const taxIndex=item.findIndex(row=>/^(?:外[ \t]*)?(?:[0-9A-Za-z-]+)[ \t]*%$/.test(row));
+   const taxIndex=item.findIndex(row=>/^(?:[外内][ \t]*)?(?:[0-9A-Za-z-]+)[ \t]*%$/.test(row));
    if(!name||!/[\p{L}]/u.test(name)||taxIndex<2)continue;
    const values=item.slice(taxIndex+1);
    if(![4,5].includes(values.length)||!values.every(value=>amount.test(value)))continue;
    const [qty,price,lineAmount]=values.slice(-3).map(extOcrMoney_);
    // A blank case column may be omitted by OCR. Require the final three printed values to reconcile.
    if(![qty,price,lineAmount].every(Number.isSafeInteger)||qty<=0||price<=0||qty*price!==lineAmount)continue;
-   const tax=item[taxIndex].match(/^外\s*(8|10)\s*%$/);
+   // Only interpret the percent token already identified within this item's tax field.
+   const tax=item[taxIndex].match(/^(?:(?:外|内)\s*|[0-9A-Za-z]+-\s*)?(8|10)\s*%$/);
    lines.push({name,sku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:'飲料',reason:''});
   }
  }

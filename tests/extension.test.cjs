@@ -232,6 +232,9 @@ test('Drive OCR split Kakuyasu columns produce a reconciled item and a labeled t
  const result=c.extParseInvoice_(text,'');
  assert.equal(result.invoiceNumber,'83701234');
  assert.equal(result.printedTotal,858);
+ assert.equal(result.lines[0].rate,10);
+ assert.equal(c.extParseInvoice_(text.replace('91-10%','外 8%'),'').lines[0].rate,8);
+ assert.equal(c.extParseInvoice_(text.replace('91-10%','110%'),'').lines[0].rate,'');
  assert.deepEqual(result.lines.map(line=>[line.name,line.qty,line.unit,line.price,line.amount]).join(','),'テストビール 中瓶,3,,286,858');
  assert.equal(c.extParseInvoice_(text.replace('20\n3\n','20\n'),'').lines.length,0);
 });
