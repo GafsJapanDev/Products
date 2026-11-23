@@ -301,6 +301,22 @@ test('Kakuyasu Drive OCR saves the printed oil collection credit exactly once',(
  assert.throws(()=>c.saveExtensionInvoice(other),/0以上/);
 });
 
+test('Kakuyasu container slips preserve split amounts and deduct once in the purchase total',()=>{
+ const c=harness();
+ const read=body=>c.extParseInvoice_('容器回収票\n2026/10/19\n'+body+'\n株式会社 カクヤス\nNo. 580000001','');
+ const draft=read('ビール空容器中/20\n4バラ\n20\n合計\n20');
+ assert.equal(draft.printedTotal,20);
+ assert.equal(draft.invoiceNumber,'580000001');
+ const [line]=draft.lines;
+ assert.deepEqual([line.name,line.qty,line.unit,line.price,line.amount,line.category],['ビール空容器中/20',4,'',null,20,'容器']);
+ const saved=c.saveExtensionInvoice(invoiceInput(c,draft)).invoice;
+ assert.equal(c.extInvoiceBuckets_(saved).容器,-20);
+ const multiple=read('ビール空容器小/30\n1バラ 5\nビール空容器中/20\n2バラ\n10\n合 計 15');
+ assert.deepEqual(multiple.lines.map(line=>line.amount).join(','),'5,10');
+ assert.equal(multiple.printedTotal,15);
+ assert.equal(read('ビール空容器中/20\n4バラ\n20\n合計').printedTotal,null);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

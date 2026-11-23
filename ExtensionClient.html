@@ -128,10 +128,9 @@ function extEditInvoice(invoice){
  $('extInvoiceFiles').replaceChildren();i.files.forEach(f=>extLink($('extInvoiceFiles'),f.name,f.url));extPending=null;extInvoiceDrafts[activeDate]=structuredClone(extInvoice);
 }
 function extSyncInvoiceUnits(){
- $('extLines').classList.toggle('ext-no-unit',extVal('extSupplier').normalize('NFKC').trim()==='カクヤス'&&extVal('extType')==='delivery');
+ $('extLines').classList.toggle('ext-no-unit',extVal('extSupplier').normalize('NFKC').trim()==='カクヤス');
 }
 $('extSupplier').addEventListener('input',extSyncInvoiceUnits);
-$('extType').addEventListener('change',extSyncInvoiceUnits);
 function extAddLine(value={}){
  const line=document.createElement('div');line.className='ext-line';
  const fields=[['name','品名','text'],['sku','商品コード','text'],['qty','数量','number'],['unit','単位','text'],['price','単価','number'],['amount','明細金額','number']];
@@ -793,13 +792,12 @@ function extReviewCell(row,key,value,type='text',options){
  td.append(field);row.append(td);
 }
 function extReviewUsesUnit(){
- return extVal('extReviewSupplier').normalize('NFKC').trim()!=='カクヤス'||extVal('extReviewType')!=='delivery';
+ return extVal('extReviewSupplier').normalize('NFKC').trim()!=='カクヤス';
 }
 function extSyncReviewUnits(){
  $('extReceiptDialog').classList.toggle('ext-no-unit',!extReviewUsesUnit());
 }
 $('extReviewSupplier').addEventListener('input',extSyncReviewUnits);
-$('extReviewType').addEventListener('change',extSyncReviewUnits);
 function extReviewAddRow(value={}){
  const entry=extReceiptQueue.find(r=>r.id===extReceiptReviewId);if(!entry)return;
  const tr=document.createElement('tr');
@@ -834,9 +832,9 @@ function extValidateReviewDraft(d,kind){
   if(d.taxMode==='net'&&!extReceiptValidNumber(d.tax))throw Error('税別伝票の消費税を入力してください');
   if(!Number.isFinite(d.adjustment))throw Error('調整額を確認してください');
   if(d.requiresQuantityReview&&d.lines.some(line=>line.qty===null))throw Error('数量が空欄の明細があります。原本を見て入力してください');
-  const kakuyasu=d.supplier.normalize('NFKC').trim()==='カクヤス'&&d.type==='delivery';
+  const kakuyasu=d.supplier.normalize('NFKC').trim()==='カクヤス';
   d.lines.forEach((l,i)=>{
-   const credit=kakuyasu&&/廃油回収/.test(l.name)&&Number.isFinite(l.price)&&Number.isFinite(l.amount)&&l.price<0&&l.amount<0;
+   const credit=kakuyasu&&d.type==='delivery'&&/廃油回収/.test(l.name)&&Number.isFinite(l.price)&&Number.isFinite(l.amount)&&l.price<0&&l.amount<0;
    if(!String(l.name||'').trim()||(!kakuyasu&&!String(l.unit||'').trim())||(!credit&&!extReceiptValidNumber(l.amount)))throw Error((i+1)+'行目の品名・単位・金額を確認してください');
    if(l.qty!==null&&!extReceiptValidNumber(l.qty)||!credit&&l.price!==null&&!extReceiptValidNumber(l.price))throw Error((i+1)+'行目の数量・単価を確認してください');
    if(credit&&(!l.qty||Math.abs(l.qty*l.price-l.amount)>0.000001))throw Error('廃油回収の数量×単価と明細金額を確認してください');

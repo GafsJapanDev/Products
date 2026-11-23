@@ -28,9 +28,12 @@ function extParseInvoice_(text,supplier,rowText,crops){
  if(isReturn&&(supplier==='カクヤス'||/カ[ \t]*ク[ \t]*ヤ[ \t]*ス/.test(metadata))){
   const parts=metadata.match(/(20\d{2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{1,2})/);
   const date=parts?parts[1]+'-'+parts[2].padStart(2,'0')+'-'+parts[3].padStart(2,'0'):'';
-  return {kind:'invoice',type:'return',supplier:'カクヤス',date,taxMode:'monthly',tax:null,lines:[],
+  const result=extParseKakuyasuReturn_(aligned),fallback=aligned===text?result:extParseKakuyasuReturn_(text);
+  const totals=[...new Set([result.total,fallback.total].filter(value=>value!==null))];
+  return {kind:'invoice',type:'return',supplier:'カクヤス',date,taxMode:'monthly',tax:null,
+   lines:result.lines.length>=fallback.lines.length?result.lines:fallback.lines,
    invoiceNumber:metadata.match(/^\s*No\.?[ \t]*([0-9]+)\s*$/im)?.[1]||'',
-   printedTotal:amountAfter(/^[ \t]*合[ \t]*計[ \t]+¥?[ \t]*([\d,]+)[ \t]*(?:円)?[ \t]*$/m,aligned),
+   printedTotal:totals.length===1?totals[0]:null,
    warnings:['容器回収票です。印字合計を正の金額で確認してください。集計時に差し引きます。']};
  }
  const detected=[['キタニ水産',/キタニ水産/],['maruyasu',/maruyasu|丸安商店/i],['プレコフーズ',/プレコ|PRECO/i],['西原',/西原商会/],['カクヤス',/カクヤス/]].filter(([,pattern])=>pattern.test(text));
@@ -149,6 +152,20 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
   return [{name:name.trim(),sku:'',qty:values[0],unit:unit||'',price:values[1],amount:values[2],
    rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''}];
  });
+}
+
+function extParseKakuyasuReturn_(text){
+ const cleaned=text.replace(/\r/g,'').replace(/,(?=[ \t]+\d{3}\b)[ \t]+/g,',');
+ const totalPattern=/^[ \t|]*合[ \t]*計[ \t|]*(?:\n[ \t|]*)?¥?[ \t]*(\d+(?:,\d{3})*)[ \t]*円?[ \t|]*$/gm;
+ const totals=[...new Set([...cleaned.matchAll(totalPattern)].map(match=>extOcrMoney_(match[1])))];
+ const body=cleaned.split(/^[ \t|]*合[ \t]*計/m)[0];
+ const item=/^[ \t|]*([^\n|]*空[ \t]*容[ \t]*器[^\n|]*?)[ \t|]*(?:\n[ \t|]*)?(\d+)[ \t]*バ[ \t]*ラ[ \t|]*(?:\n[ \t|]*)?(\d+(?:,\d{3})*)[ \t]*円?[ \t|]*$/gm;
+ const lines=[...body.matchAll(item)].flatMap(([,name,count,amount])=>{
+  const qty=Number(count),value=extOcrMoney_(amount);
+  if(!Number.isSafeInteger(qty)||qty<=0||!Number.isSafeInteger(value))return [];
+  return [{name:name.trim(),sku:'',qty,unit:'',price:null,amount:value,rate:'',category:'容器',reason:''}];
+ });
+ return {lines,total:totals.length===1?totals[0]:null};
 }
 
 function extParseKakuyasuDrive_(text){
