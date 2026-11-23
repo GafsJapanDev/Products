@@ -109,6 +109,11 @@ function extParseInvoice_(text,supplier,rowText,crops){
   lines.push(...extParseKakuyasuWrappedRows_(crops.items));
   requiresQuantityReview=lines.length>0;
  }
+ if(typeof rowText!=='string'&&supplier==='カクヤス'&&type==='delivery'){
+  const drive=extParseKakuyasuDrive_(compact);
+  if(!lines.length)lines.push(...drive.lines);
+  if(drive.total!==null)total=drive.total;
+ }
  if(supplier==='カクヤス'&&type==='delivery'){
   lines.forEach(line=>{line.unit='';});
   requiresQuantityReview=lines.some(line=>line.qty===null);
@@ -135,6 +140,46 @@ function extParseBrowserInvoiceLines_(rowText,supplier){
   return [{name:name.trim(),sku:'',qty:values[0],unit:unit||'',price:values[1],amount:values[2],
    rate:'',category:supplier==='カクヤス'?'飲料':'食材',reason:''}];
  });
+}
+
+function extParseKakuyasuDrive_(text){
+ const rows=text.split(/\r?\n/).map(row=>row.trim()).filter(Boolean);
+ const code=/^\d{2}(?:-\d{2}){3}$/;
+ const amount=/^\d+(?:,\d{3})*$/;
+ const first=rows.findIndex(row=>code.test(row));
+ if(first===-1)return {lines:[],total:null};
+ const heading=rows.slice(Math.max(0,first-12),first).join('').replace(/\s/g,'');
+ const footer=rows.findIndex((row,index)=>index>first&&/^摘\s*要|^(?:売上|差引)?合\s*計(?:$|[ \t])/.test(row));
+ const body=rows.slice(first,footer===-1?rows.length:footer);
+ const lines=[];
+ if(/商品名.*ケース数.*バラ数.*単価.*金額/.test(heading)){
+  const starts=body.flatMap((row,index)=>code.test(row)?[index]:[]);
+  for(const [number,index] of starts.entries()){
+   const item=body.slice(index+1,starts[number+1]);
+   const [name]=item;
+   const taxIndex=item.findIndex(row=>/^(?:外[ \t]*)?(?:[0-9A-Za-z-]+)[ \t]*%$/.test(row));
+   if(!name||!/[\p{L}]/u.test(name)||taxIndex<2)continue;
+   const values=item.slice(taxIndex+1);
+   if(![4,5].includes(values.length)||!values.every(value=>amount.test(value)))continue;
+   const [qty,price,lineAmount]=values.slice(-3).map(extOcrMoney_);
+   // A blank case column may be omitted by OCR. Require the final three printed values to reconcile.
+   if(![qty,price,lineAmount].every(Number.isSafeInteger)||qty<=0||price<=0||qty*price!==lineAmount)continue;
+   const tax=item[taxIndex].match(/^外\s*(8|10)\s*%$/);
+   lines.push({name,sku:'',qty,unit:'',price,amount:lineAmount,rate:tax?Number(tax[1]):'',category:'飲料',reason:''});
+  }
+ }
+ const totals=new Map();
+ for(let index=footer;index>=0&&index<rows.length;index++){
+  const match=rows[index].match(/^(差引|売上)?合[ \t]*計(?:[ \t]+([\d,]+)[ \t]*円?)?$/);
+  if(!match)continue;
+  const value=match[2]||rows[index+1];
+  if(!amount.test(value||''))continue;
+  const label=match[1]||'合計';
+  if(!totals.has(label))totals.set(label,new Set());
+  totals.get(label).add(extOcrMoney_(value));
+ }
+ const preferred=['差引','合計','売上'].map(label=>totals.get(label)).find(Boolean);
+ return {lines,total:preferred?.size===1?[...preferred][0]:null};
 }
 
 function extParseKakuyasuCrop_(text){

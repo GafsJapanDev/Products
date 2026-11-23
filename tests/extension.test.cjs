@@ -224,6 +224,18 @@ test('Kakuyasu deliveries save loose quantity without a unit',()=>{
  assert.throws(()=>c.saveExtensionInvoice(invoiceInput(c,{lines:input.lines,printedTotal:858})),/単位/);
 });
 
+test('Drive OCR split Kakuyasu columns produce a reconciled item and a labeled total',()=>{
+ const c=harness();
+ const text=['納品書','株式会社 カクヤス','日付 倉庫区分 26/10/31 790','伝票 No.','83701234','コード','商品名','規格 税区',
+  '入数 ケース数 バラ数','単価','金 額','33-33-33-33','テストビール 中瓶','500ML','98','91-10%',
+  '20','3','286','858','摘要','容器','売上合計 消費税','858','合計','858','差引合計'].join('\n');
+ const result=c.extParseInvoice_(text,'');
+ assert.equal(result.invoiceNumber,'83701234');
+ assert.equal(result.printedTotal,858);
+ assert.deepEqual(result.lines.map(line=>[line.name,line.qty,line.unit,line.price,line.amount]).join(','),'テストビール 中瓶,3,,286,858');
+ assert.equal(c.extParseInvoice_(text.replace('20\n3\n','20\n'),'').lines.length,0);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};
