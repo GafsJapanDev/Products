@@ -92,10 +92,10 @@ async function main(){
  assert.equal(fields[0].name,'ビール 中瓶');
  assert.equal(fields[0].amount,'858');
  assert.ok(fields[0].left<355&&fields[0].right>365);
- assert.throws(()=>sandbox.extValidateReviewDraft({
+ assert.doesNotThrow(()=>sandbox.extValidateReviewDraft({
   date:'2026-10-31',supplier:'カクヤス',type:'delivery',taxMode:'monthly',printedTotal:858,adjustment:0,
   requiresQuantityReview:true,lines:[{name:'ビール',qty:null,amount:858,unit:'本',price:286}]
- },'invoice'),/数量が空欄/);
+ },'invoice'));
  // Pool starts at most two jobs and makes progress while another job is unfinished.
  let active=0,max=0,done=0;const releases=[];
  const pool=sandbox.extReceiptPool([1,2,3],()=>new Promise(resolve=>{active++;max=Math.max(max,active);releases.push(()=>{active--;done++;resolve();});}));

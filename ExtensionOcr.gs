@@ -136,7 +136,7 @@ function extParseInvoice_(text,supplier,rowText,crops){
   requiresQuantityReview=lines.some(line=>line.qty===null);
  }
  return {kind:'invoice',date,supplier,invoiceNumber,printedTotal:total,tax,taxMode,type,lines,pageNumber,pageCount,requiresQuantityReview,
-  warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(requiresQuantityReview?['明細候補の空欄は原本を見て補ってください。']:[]),...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
+  warnings:['金額・税区分・納品日を原本と照合してください。',...returnWarnings,...(requiresQuantityReview?['数量を読み取れない明細があります。必要に応じて原本を見て補ってください。']:[]),...(lines.length?[]:['明細の列を判別できませんでした。原文を確認し明細を入力してください。']),...(supplier==='maruyasu'?[pageCount>1?('このページは '+pageNumber+'/'+pageCount+'。全ページをまとめて確認してください。'):'複数枚の場合は1件にまとめ、合計は1回だけ入力してください。']:[])]};
 }
 /** The browser supplies one line of text per visually aligned row. */
 function extParseBrowserInvoiceLines_(rowText,supplier){

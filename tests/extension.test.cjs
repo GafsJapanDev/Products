@@ -221,7 +221,10 @@ test('Kakuyasu deliveries save loose quantity without a unit',()=>{
  const saved=c.saveExtensionInvoice(input).invoice;
  assert.equal(saved.lines[0].unit,'');
  assert.equal(saved.lines[0].qty,3);
- assert.throws(()=>c.saveExtensionInvoice(invoiceInput(c,{lines:input.lines,printedTotal:858})),/単位/);
+ const otherLine={...input.lines[0],qty:null,price:null};
+ const other=c.saveExtensionInvoice(invoiceInput(c,{supplier:'西原',lines:[otherLine],printedTotal:858})).invoice;
+ assert.deepEqual([other.lines[0].qty,other.lines[0].unit,other.lines[0].price],[null,'',null]);
+ assert.equal(other.total,858);
 });
 
 test('Drive OCR split Kakuyasu columns produce a reconciled item and a labeled total',()=>{
@@ -297,6 +300,9 @@ test('Kakuyasu Drive OCR saves the printed oil collection credit exactly once',(
  const buckets=c.extInvoiceBuckets_(saved);
  assert.equal(buckets.飲料,373);
  assert.equal(buckets.雑費,-9);
+ const partial=invoiceInput(c,{...draft,date:'2026-10-24',invoiceNumber:'83701235',lines:draft.lines.map(line=>
+  line.amount<0?{...line,qty:null,price:null}:line)});
+ assert.equal(c.saveExtensionInvoice(partial).invoice.lines[2].amount,-9);
  const other=invoiceInput(c,{...draft,supplier:'西原',lines:draft.lines.map(line=>({...line,unit:'本'}))});
  assert.throws(()=>c.saveExtensionInvoice(other),/0以上/);
 });
