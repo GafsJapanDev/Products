@@ -4,7 +4,7 @@
  <meta charset="utf-8">
  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
  <meta name="referrer" content="no-referrer">
- <title>店舗日報｜伝票カメラ</title>
+ <title>納品伝票を撮影</title>
  <style>
   :root{font:16px system-ui,sans-serif;color:#163b51;background:#edf8fe}
   *{box-sizing:border-box}[hidden]{display:none!important}
@@ -24,7 +24,7 @@
 </head>
 <body>
  <main>
-  <h1>店舗日報｜伝票カメラ</h1>
+  <h1>納品伝票を撮影</h1>
   <p>伝票を1枚ずつ平らに置き、文字の上を画面の上にしてください。影や反射を避け、四隅と合計欄が入るように真上から撮ってください。</p>
   <p>店舗日報で伝票を読み取る際に画像をGemini APIへ送信します。無料枠では、送信データがサービス改善に使われる場合があります。</p>
   <div id="stage" class="stage" hidden>
@@ -34,6 +34,7 @@
   </div>
   <p id="status" role="status" aria-live="polite">店舗日報から開いてください。</p>
   <div class="actions">
+   <button id="start" class="primary" type="button" hidden>カメラを開始</button>
    <button id="capture" class="primary" type="button" hidden>撮影</button>
    <button id="use" class="primary" type="button" hidden>この写真を使う</button>
    <button id="retake" type="button" hidden>撮り直す</button>
@@ -61,7 +62,8 @@
   }
   async function start(){
    const current=++sequence;
-   status.textContent='伝票カメラを起動しています。ブラウザからカメラの利用を求められたら「許可」を選んでください。';
+   byId('start').disabled=true;
+   status.textContent='背面カメラを起動しています。';
    try{
     if(!navigator.mediaDevices?.getUserMedia)throw Error('利用不可');
     const next=await navigator.mediaDevices.getUserMedia({
@@ -72,6 +74,7 @@
     video.srcObject=stream;
     await video.play();
     if(current!==sequence)return;
+    byId('start').hidden=true;
     byId('stage').hidden=false;
     byId('capture').hidden=false;
     status.textContent='ピントを確認して「撮影」を押してください。';
@@ -80,13 +83,14 @@
     stop();
     status.textContent='ガイド付き撮影を利用できません。店舗日報に戻って標準カメラを使います。';
     send('receipt-camera-unavailable');
-   }
+   }finally{byId('start').disabled=false;}
   }
   function showPhoto(show){
    video.hidden=show;photo.hidden=!show;
    byId('guide').hidden=show;byId('capture').hidden=show;
    byId('use').hidden=!show;byId('retake').hidden=!show;
   }
+  byId('start').onclick=start;
   byId('capture').onclick=()=>{
    if(!video.videoWidth||!video.videoHeight)return;
    photo.width=video.videoWidth;photo.height=video.videoHeight;
@@ -132,6 +136,7 @@
   window.addEventListener('pagehide',stop);
   if(valid){
    send('receipt-camera-ready');
+   byId('start').hidden=false;
    start();
   }
  </script>
