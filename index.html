@@ -6,7 +6,7 @@
  <meta name="referrer" content="no-referrer">
  <title>納品伝票を撮影</title>
  <style>
-  :root{font:16px system-ui,sans-serif;color:#172620;background:#f4f7f5}
+  :root{font:16px system-ui,sans-serif;color:#163b51;background:#edf8fe}
   *{box-sizing:border-box}[hidden]{display:none!important}
   body{margin:0;padding:clamp(12px,3vw,26px)}
   main{max-width:760px;margin:auto}
@@ -15,17 +15,18 @@
   .stage{position:relative;background:#18201d;border-radius:12px;overflow:hidden;width:fit-content;max-width:100%;margin:auto}
   video,canvas{display:block;max-width:100%;max-height:62dvh;width:auto;height:auto}
   .guide{position:absolute;inset:8%;border:2px solid white;border-radius:8px;box-shadow:0 0 0 100vmax #09130d55;pointer-events:none;text-align:center}
-  .guide span{display:inline-block;background:#12241ae8;padding:4px 8px;color:white}
+  .guide span{display:inline-block;background:#12394de8;padding:4px 8px;color:white}
   .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-  button{font:inherit;min-height:44px;border-radius:8px;border:1px solid #afc1b6;background:white;padding:8px 14px;color:inherit}
-  .primary{background:#175b3f;color:white;border-color:#175b3f}
+  button{font:inherit;min-height:44px;border-radius:8px;border:1px solid #a9c8d9;background:white;padding:8px 14px;color:inherit}
+  .primary{background:#09678f;color:white;border-color:#09678f}
   button:disabled{opacity:.55}
  </style>
 </head>
 <body>
  <main>
   <h1>納品伝票を撮影</h1>
-  <p>文字の上を画面の上に。影や反射を避け、四隅と合計欄が入るよう真上から写してください。</p>
+  <p>伝票を1枚ずつ平らに置き、文字の上を画面の上にしてください。影や反射を避け、四隅と合計欄が入るように真上から撮ってください。</p>
+  <p>店舗日報で伝票を読み取る際に画像をGemini APIへ送信します。無料枠では、送信データがサービス改善に使われる場合があります。</p>
   <div id="stage" class="stage" hidden>
    <video id="preview" autoplay muted playsinline></video>
    <canvas id="photo" aria-label="撮影した伝票" hidden></canvas>
