@@ -14,7 +14,8 @@ const elements={},el=id=>elements[id]||(elements[id]=new Element()),nav=new Elem
 const sections=['売上','仕入','小口','入金','棚卸','AI'].map(id=>el(id));
 const calls=[];
 const context={suppliers:['キタニ水産'],products:[],invoices:[],legacy:[],taxes:[]};
-const sandbox={window:{addEventListener(){}},console,crypto,structuredClone,$:el,document:{getElementById:el,createElement:t=>new Element(t),
+const listeners={};
+const sandbox={window:{location:{origin:'https://example-script.googleusercontent.com'},addEventListener(name,fn){listeners[name]=fn;}},console,crypto,structuredClone,URL,URLSearchParams,Blob,File,$:el,document:{getElementById:el,createElement:t=>new Element(t),
  querySelector:s=>s==='nav'?nav:actions,
  querySelectorAll:s=>s==='section'?sections:s==='nav button'?nav.children:[]},
  render(){sections.forEach(e=>e.hidden=e!==el(sandbox.tab));},capture(){},current(){return {date:sandbox.activeDate};},
@@ -168,6 +169,31 @@ async function main(){
  run('extReceiptQueue.pop()');
 
  sandbox.rpc=previousRpc;
+
+ // Only the opened camera page may deliver a photo for the active capture.
+ const replies=[];
+ const popup={closed:false,postMessage:(message,origin)=>replies.push([message,origin]),close(){this.closed=true;}};
+ let cameraUrl;
+ sandbox.window.open=url=>{cameraUrl=new URL(url);return popup;};
+ const savedAccept=sandbox.extAcceptCameraPhoto;
+ const photos=[];
+ sandbox.extAcceptCameraPhoto=file=>{photos.push(file);return true;};
+ el('extOpenCamera').onclick();
+ const event={source:popup,origin:cameraUrl.origin,data:{type:'receipt-camera-photo',
+  token:new URLSearchParams(cameraUrl.hash.slice(1)).get('token'),blob:new Blob(['photo'],{type:'image/jpeg'})}};
+ assert.equal(el('extCameraDialog').open,true);
+ listeners.message({...event,origin:'https://example.com'});
+ listeners.message({...event,source:{}});
+ listeners.message({...event,data:{...event.data,token:'wrong'}});
+ assert.equal(photos.length,0);
+ listeners.message(event);
+ listeners.message(event);
+ assert.equal(photos.length,1);
+ assert.equal(photos[0].type,'image/jpeg');
+ assert.equal(replies[0][0].ok,true);
+ assert.equal(replies[0][1],cameraUrl.origin);
+ assert.equal(el('extCameraDialog').open,false);
+ sandbox.extAcceptCameraPhoto=savedAccept;
 
  // Journal confirmation writes to the existing form and retains the source link.
  sandbox.tab='売上';sandbox.render();

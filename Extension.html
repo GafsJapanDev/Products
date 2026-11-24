@@ -19,10 +19,6 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 @media(max-width:900px){.ext-review-layout{grid-template-columns:minmax(0,1fr)}#extReviewPreview{height:30vh}}
 #extCameraDialog{width:min(92vw,42rem);max-height:92dvh;border:0;border-radius:12px;padding:1rem}
 #extCameraDialog::backdrop{background:#0009}
-.ext-camera-stage{position:relative;display:grid;place-items:center;background:#161b18;overflow:hidden;border-radius:8px}
-.ext-camera-stage video,.ext-camera-stage canvas{width:100%;height:auto;max-height:58dvh;object-fit:contain}
-.ext-camera-guide{position:absolute;inset:8%;border:2px solid white;box-shadow:0 0 0 2px #0009;display:flex;justify-content:center;align-items:flex-start;pointer-events:none}
-.ext-camera-guide span{background:#101410df;color:white;padding:.4rem;text-align:center}
 #extCameraDialog [hidden]{display:none}
 #extReviewGuests[hidden]{display:none}
 #extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(6),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(6){display:none}
@@ -71,17 +67,8 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <p id="extBatchNotice" class="ext-warning" role="status"></p>
 </div></div>
 <dialog id="extCameraDialog" aria-label="伝票の撮影">
- <div id="extCameraStage" class="ext-camera-stage" hidden>
-  <video id="extCameraVideo" playsinline autoplay muted></video>
-  <canvas id="extCameraPhoto" aria-label="撮影した伝票" hidden></canvas>
-  <div id="extCameraOverlay" class="ext-camera-guide"><span>文字の上を画面の上に。紙の四隅を枠の内側に。</span></div>
- </div>
- <p class="hint">伝票を1枚だけ写し、影や反射を避けて、数量・単価の小さな数字にピントを合わせてください。</p>
  <p id="extCameraMessage" role="status"></p>
  <div class="ext-actions">
-  <button id="extTakePhoto" type="button" disabled>撮影</button>
-  <button id="extUsePhoto" type="button" hidden>この写真を追加</button>
-  <button id="extRetakePhoto" type="button" hidden>撮り直す</button>
   <button id="extNativeCamera" type="button">標準カメラで撮る</button>
   <button id="extCloseCamera" type="button">閉じる</button>
  </div>
