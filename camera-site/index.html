@@ -12,7 +12,6 @@
   main{max-width:760px;margin:auto}
   h1{margin:0 0 8px;font-size:clamp(1.25rem,3.5vw,1.7rem)}
   p{line-height:1.55;margin:8px 0 12px}
-  .permission{background:white;border:1px solid #a9c8d9;border-radius:12px;padding:12px 16px}
   .stage{position:relative;background:#18201d;border-radius:12px;overflow:hidden;width:fit-content;max-width:100%;margin:auto}
   video,canvas{display:block;max-width:100%;max-height:62dvh;width:auto;height:auto}
   .guide{position:absolute;inset:8%;border:2px solid white;border-radius:8px;box-shadow:0 0 0 100vmax #09130d55;pointer-events:none;text-align:center}
@@ -26,7 +25,6 @@
 <body>
  <main>
   <h1>店舗日報｜伝票カメラ</h1>
-  <p id="permission" class="permission" hidden>「カメラを開く」を押すと、ブラウザに「<strong id="cameraSite"></strong>」からのカメラ利用許可が表示される場合があります。店舗日報の伝票撮影用ページです。表示されたら「許可」を選んでください。</p>
   <p>伝票を1枚ずつ平らに置き、文字の上を画面の上にしてください。影や反射を避け、四隅と合計欄が入るように真上から撮ってください。</p>
   <p>店舗日報で伝票を読み取る際に画像をGemini APIへ送信します。無料枠では、送信データがサービス改善に使われる場合があります。</p>
   <div id="stage" class="stage" hidden>
@@ -36,7 +34,6 @@
   </div>
   <p id="status" role="status" aria-live="polite">店舗日報から開いてください。</p>
   <div class="actions">
-   <button id="start" class="primary" type="button" aria-describedby="permission" hidden>カメラを開く</button>
    <button id="capture" class="primary" type="button" hidden>撮影</button>
    <button id="use" class="primary" type="button" hidden>この写真を使う</button>
    <button id="retake" type="button" hidden>撮り直す</button>
@@ -64,8 +61,7 @@
   }
   async function start(){
    const current=++sequence;
-   byId('start').disabled=true;
-   status.textContent='背面カメラを起動しています。';
+   status.textContent='伝票カメラを起動しています。ブラウザからカメラの利用を求められたら「許可」を選んでください。';
    try{
     if(!navigator.mediaDevices?.getUserMedia)throw Error('利用不可');
     const next=await navigator.mediaDevices.getUserMedia({
@@ -76,8 +72,6 @@
     video.srcObject=stream;
     await video.play();
     if(current!==sequence)return;
-    byId('start').hidden=true;
-    byId('permission').hidden=true;
     byId('stage').hidden=false;
     byId('capture').hidden=false;
     status.textContent='ピントを確認して「撮影」を押してください。';
@@ -86,14 +80,13 @@
     stop();
     status.textContent='ガイド付き撮影を利用できません。店舗日報に戻って標準カメラを使います。';
     send('receipt-camera-unavailable');
-   }finally{byId('start').disabled=false;}
+   }
   }
   function showPhoto(show){
    video.hidden=show;photo.hidden=!show;
    byId('guide').hidden=show;byId('capture').hidden=show;
    byId('use').hidden=!show;byId('retake').hidden=!show;
   }
-  byId('start').onclick=start;
   byId('capture').onclick=()=>{
    if(!video.videoWidth||!video.videoHeight)return;
    photo.width=video.videoWidth;photo.height=video.videoHeight;
@@ -139,10 +132,7 @@
   window.addEventListener('pagehide',stop);
   if(valid){
    send('receipt-camera-ready');
-   byId('cameraSite').textContent=location.hostname;
-   byId('permission').hidden=false;
-   byId('start').hidden=false;
-   status.textContent='';
+   start();
   }
  </script>
 </body>
