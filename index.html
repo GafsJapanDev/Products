@@ -80,9 +80,8 @@
    }catch(error){
     if(current!==sequence)return;
     stop();
-    status.textContent=error.name==='NotAllowedError'
-     ?'カメラの許可が必要です。ブラウザのサイト設定を確認するか、店舗日報に戻って標準カメラを使ってください。'
-     :'カメラを起動できませんでした。店舗日報に戻って標準カメラを使えます。';
+    status.textContent='ガイド付き撮影を利用できません。店舗日報に戻って標準カメラを使います。';
+    send('receipt-camera-unavailable');
    }finally{byId('start').disabled=false;}
   }
   function showPhoto(show){
@@ -135,6 +134,7 @@
   byId('close').onclick=()=>{send('receipt-camera-cancel');stop();window.close();};
   window.addEventListener('pagehide',stop);
   if(valid){
+   send('receipt-camera-ready');
    byId('start').hidden=false;
    start();
   }
