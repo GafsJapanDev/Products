@@ -2,7 +2,7 @@
 <script>
 
 const extTabs=['棚卸','AI'];
-let extOcrApplied=false,extOcrDate='',extPurchaseMode='simple',extOcrDraft=null,extContext=null,extInvoice=null,extStock=null,extOcrFiles=[],extUploadCache=[],extPending=null,extJournal={};
+let extOcrApplied=false,extOcrDate='',extPurchaseMode='read',extOcrDraft=null,extContext=null,extInvoice=null,extStock=null,extOcrFiles=[],extUploadCache=[],extPending=null,extJournal={};
 const extInvoiceDrafts={};
 const extOriginalRender=render,extOriginalCapture=capture,extOriginalCurrent=current,extOriginalSave=save;
 function extCaptureInvoice(){
@@ -15,14 +15,23 @@ function extCaptureInvoice(){
 capture=function(){if(!extTabs.includes(tab))extOriginalCapture();extCaptureInvoice();};
 current=function(){const r=extOriginalCurrent();if(tab==='売上')r.journalFiles=extJournal[activeDate]||(day.売上?.[0]?.journalFiles||[]);return r;};
 function extSyncPurchaseMode(){
- $('extSimplePurchase').hidden=extPurchaseMode!=='simple';
- $('extInvoicePanel').hidden=extPurchaseMode!=='invoice';
- $('extSimpleMode').setAttribute('aria-pressed',String(extPurchaseMode==='simple'));
- $('extInvoiceMode').setAttribute('aria-pressed',String(extPurchaseMode==='invoice'));
- if(tab==='仕入')$('save').textContent='仕入れを保存';
+ const manual=extPurchaseMode==='manual';
+ $('extManualPurchase').hidden=!manual;
+ $('extPurchaseOcrHost').hidden=manual;
+ $('extOpenInvoiceOcr').setAttribute('aria-pressed',String(!manual));
+ $('extManualMode').setAttribute('aria-pressed',String(manual));
+ if(tab==='仕入'){
+  $('extOcrPanel').hidden=manual;
+  $('extInvoicePanel').hidden=!manual;
+  $('save').hidden=!manual;
+  $('save').textContent='仕入先・金額を保存';
+ }
 }
 function extSetPurchaseMode(mode){
- if(busy)return;capture();extPurchaseMode=mode;extSyncPurchaseMode();
+ if(busy)return;
+ capture();
+ extPurchaseMode=mode;
+ extSyncPurchaseMode();
 }
 save=function(){
  if(busy)return;
@@ -31,14 +40,12 @@ save=function(){
   showStatus(tab==='仕入'?'読み取った伝票は一覧で確認し、「確認済みの伝票をまとめて保存」を押してください。':'読み取ったジャーナルを一覧から確認し、売上の入力欄へ反映してください。','warning');
   $('extBatchRows').scrollIntoView({behavior:'smooth',block:'center'});return;
  }
- if(tab==='仕入'&&extPurchaseMode==='invoice')return extRun(async()=>{
-  if(!extInvoice||extInvoice.date!==activeDate)throw Error('仕入れの読み込みが終わるまでお待ちください');
-  await extSaveInvoice();day=await rpc('loadDay',activeDate);
- });
+ if(tab==='仕入'&&extPurchaseMode!=='manual')return;
  return extOriginalSave();
 };
 render=function(){
  document.querySelector('.save-actions').hidden=extTabs.includes(tab);
+ $('save').hidden=false;
  if(!extTabs.includes(tab))extOriginalRender();
  else {
   document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==tab);
@@ -50,8 +57,8 @@ render=function(){
   if(extVal('extOcrKind')!==kind||(extOcrDate&&extOcrDate!==activeDate))extResetOcr();
   extSet('extOcrKind',kind);
   $('extOcrHeading').textContent=kind==='journal'?'売上ジャーナルを読み取る':'納品伝票を読み取る';
-  $('extOcrSupplierLabel').hidden=kind==='journal';
-  $('extInvoiceOcrNotice').hidden=kind==='journal';
+  $('extCloseOcr').hidden=kind==='invoice';
+  if(kind==='journal'&&extOcrDate!==activeDate)$('extOcrPanel').hidden=true;
   $('extInvoiceCapture').hidden=kind==='journal';
   $(tab==='売上'?'extJournalOcrHost':'extPurchaseOcrHost').append($('extOcrPanel'));
  }
@@ -93,14 +100,12 @@ function extOpenOcr(kind){
  if(busy)return;
  if(extVal('extOcrKind')!==kind)extResetOcr();
  extSet('extOcrKind',kind);extOcrDate=activeDate;$('extOcrPanel').hidden=false;
- if(kind==='invoice')extSet('extOcrSupplier',extVal('extSupplier'));
  $('extOcrPanel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 $('extOpenJournal').onclick=()=>extOpenOcr('journal');
-$('extOpenInvoiceOcr').onclick=()=>extOpenOcr('invoice');
+$('extOpenInvoiceOcr').onclick=()=>extSetPurchaseMode('read');
 $('extCloseOcr').onclick=()=>{$('extOcrPanel').hidden=true;};
-$('extSimpleMode').onclick=()=>extSetPurchaseMode('simple');
-$('extInvoiceMode').onclick=()=>extSetPurchaseMode('invoice');
+$('extManualMode').onclick=()=>extSetPurchaseMode('manual');
 $('extPurchaseInvoiceHost').append($('extInvoicePanel'));
 function extSelect(el,values,value){el.replaceChildren();values.forEach(x=>{const o=document.createElement('option');o.value=typeof x==='string'?x:x.id;o.textContent=typeof x==='string'?x:x.label;el.append(o);});if(value!=null)el.value=value;}
 function extVal(id){return $(id).value;}
@@ -112,7 +117,7 @@ async function extLoadContext(){
  extSelect($('extProductSelect'),[{id:'',label:'新規登録'},...result.products.map(p=>({id:p.id,label:p.supplier+'／'+p.name}))]);
  extSelect($('extStockProduct'),result.products.map(p=>({id:p.id,label:p.supplier+'／'+p.name})));
  $('extInvoiceList').replaceChildren();
- result.invoices.forEach(i=>{const b=document.createElement('button');b.textContent=i.supplier.name+' '+i.printedTotal+'円 '+(i.status==='cancelled'?'取消':'');b.onclick=()=>{extEditInvoice(i);extPurchaseMode='invoice';extSyncPurchaseMode();};$('extInvoiceList').append(b);});
+ result.invoices.forEach(i=>{const b=document.createElement('button');b.textContent=i.supplier.name+' '+i.printedTotal+'円 '+(i.status==='cancelled'?'取消':'');b.onclick=()=>{extEditInvoice(i);extPurchaseMode='manual';extSyncPurchaseMode();};$('extInvoiceList').append(b);});
  if(tab==='仕入'&&(!extInvoice||extInvoice.date!==date))extEditInvoice(extInvoiceDrafts[date]||null);
  if(!$('extStockMonth').value)$('extStockMonth').value=date.slice(0,7);
  if(!$('extTaxMonth').value)$('extTaxMonth').value=date.slice(0,7);
@@ -213,6 +218,10 @@ async function extSaveInvoice(status='confirmed'){
  if(result.needsDuplicateConfirmation){if(!confirm('同じ仕入先・伝票番号または金額の伝票があります。別の伝票として保存しますか？'))return;input.duplicateConfirmed=true;result=await rpc('saveExtensionInvoice',input);}
  extInvoice=result.invoice;await extLoadContext();extEditInvoice(result.invoice);
 }
+$('extSaveManualInvoice').onclick=()=>extRun(async()=>{
+ if(!extInvoice||extInvoice.date!==activeDate)throw Error('仕入れの読み込みが終わるまでお待ちください');
+ await extSaveInvoice();day=await rpc('loadDay',activeDate);
+});
 $('extAddLine').onclick=()=>extAddLine();$('extNewInvoice').onclick=()=>extEditInvoice(null);
 $('extCancelInvoice').onclick=()=>{if(extInvoice?.version&&confirm('この伝票だけを取り消します。原本と履歴は残ります。'))extRun(()=>extSaveInvoice('cancelled'));};
 $('extSaveTax').onclick=()=>extRun(async()=>{
@@ -519,7 +528,7 @@ $('extReadOcr').onclick=async()=>{
   const kind=extReceiptKind(),entries=[];
   extUploadCache.forEach(upload=>{
    let entry=extReceiptQueue.find(r=>r.uploads.some(u=>u.id===upload.id)||r.previousUploadIds?.includes(upload.id));
-   if(!entry){entry={id:crypto.randomUUID(),kind,status:'reading',uploads:[upload],sources:[],texts:[],draft:null,supplier:extVal('extOcrSupplier'),uploadMonth:activeDate.slice(0,7)};extReceiptQueue.push(entry);}
+   if(!entry){entry={id:crypto.randomUUID(),kind,status:'reading',uploads:[upload],sources:[],texts:[],draft:null,uploadMonth:activeDate.slice(0,7)};extReceiptQueue.push(entry);}
    if(!['saved','applied','merged','confirmed','ready'].includes(entry.status))entries.push(entry);
   });
   if(entries.length)await extReadReceiptEntries(entries);else showStatus('この添付は読み取り済みです。一覧から確認してください','warning');

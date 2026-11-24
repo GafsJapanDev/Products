@@ -6,7 +6,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 .ext-scroll{overflow:auto}.ext-table{border-collapse:collapse;width:100%;font-size:14px}.ext-table td,.ext-table th{padding:10px;border-bottom:1px solid var(--line);text-align:left}
 .ext-table input{min-width:95px}#extOcrText{width:100%;min-height:130px}.ext-warning{color:#a41420;white-space:pre-line}.ext-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .ext-check input{width:auto;min-height:24px}.ext-badge{background:#fff0cb;padding:10px;font-weight:bold}.ext-hidden[hidden]{display:none}
-.save-actions[hidden],#extInvoicePanel[hidden],#extSimplePurchase[hidden],#extOcrPanel[hidden]{display:none}.ext-input-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ext-input-actions button[aria-pressed="true"]{background:#e2eee6;font-weight:700}
+.save-actions[hidden],#extInvoicePanel[hidden],#extSimplePurchase[hidden],#extOcrPanel[hidden]{display:none}.ext-input-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.ext-input-actions button[aria-pressed="true"]{background:var(--accent-soft);font-weight:700}
 #extReceiptDialog{width:min(1200px,96vw);max-width:96vw;max-height:94dvh;padding:0;overflow:auto}
 .ext-dialog-top,.ext-dialog-bottom{position:sticky;background:white;padding:14px 18px;z-index:1;border-bottom:1px solid var(--line)}
 .ext-dialog-top{top:0;display:flex;align-items:center;justify-content:space-between;gap:12px}.ext-dialog-bottom{bottom:0;border-top:1px solid var(--line)}
@@ -26,11 +26,11 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 #extReviewGuests[hidden]{display:none}
 #extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(7),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(7){display:none}
 #extLines.ext-no-unit .ext-unit-field{display:none}
-#extInvoiceOcrNotice[hidden]{display:none}
+#extManualPurchase[hidden],#extPurchaseOcrHost[hidden],#extCloseOcr[hidden]{display:none}
 </style>
 <div class="ext-badge">拡張テスト版 ／ LINE送信停止中</div>
 <div id="extInvoicePanel" hidden>
- <div class="card"><h2>仕入れ内容を確認</h2>
+ <div class="card"><h2>伝票・品目</h2>
  <div class="ext-grid"><label>仕入先<input id="extSupplier" list="extSuppliers"></label><label>伝票番号<input id="extInvoiceNumber"></label></div>
  <label>入力方法<select id="extLegacy"><option value="">新しい伝票</option></select></label>
  <div class="ext-grid"><label>種類<select id="extType"><option value="delivery">納品</option><option value="return">容器回収・返金</option></select></label><label>税区分<select id="extTaxMode"><option value="gross">税込</option><option value="net">税別・税額あり</option><option value="monthly">税別・月末加算</option></select></label></div>
@@ -39,7 +39,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <div id="extLines"></div><button type="button" id="extAddLine">＋ 品目を追加</button>
  <label>差額・調整の理由<textarea id="extReason"></textarea></label>
  <p id="extInvoiceFiles"></p>
- <div class="ext-actions"><button id="extNewInvoice">新しい伝票</button><button id="extCancelInvoice">この伝票を取消</button></div>
+ <div class="ext-actions"><button type="button" id="extSaveManualInvoice">伝票を保存</button><button id="extNewInvoice">新しい伝票</button><button id="extCancelInvoice">この伝票を取消</button></div>
  </div>
  <div class="card"><h3>この日の伝票</h3><div id="extInvoiceList"></div></div>
  <div class="card"><h3>月末の税額</h3><p class="hint">月末加算の伝票分のみ。食材・飲料・雑費を分けて入力します。</p>
@@ -52,11 +52,8 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 <div id="extOcrPanel" hidden><div class="card">
  <button id="extCloseOcr" type="button">読み取りを閉じる</button>
  <h3 id="extOcrHeading">帳票の読み取り</h3><input id="extOcrKind" type="hidden" value="invoice">
- <label id="extOcrSupplierLabel">仕入先（不明なら空欄・伝票ごとに修正できます）<input id="extOcrSupplier" list="extSuppliers"></label>
- <p class="hint" id="extInvoiceOcrNotice">伝票の写真・PDFをGoogle Gemini APIに送信します。無料枠では送信データがサービス改善に使われる場合があります。</p>
  <div id="extInvoiceCapture">
-  <p class="hint" id="extCaptureGuide">伝票を1枚ずつ平らに置き、明るい場所で真上から撮ってください。文字の上を画面の上にして、四隅と合計欄が入る範囲で大きく写します。影や反射を避け、数量や単価の小さな数字までくっきり見えるか確認してください。</p>
-  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">伝票読取</button>
+  <button id="extOpenCamera" type="button">伝票読取</button>
   <input id="extCamera" type="file" accept="image/*" capture="environment" hidden>
   <p id="extCaptureStatus" class="hint" role="status"></p>
  </div>
