@@ -13,6 +13,9 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 .ext-review-layout{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.4fr);gap:18px;padding:18px}
 #extReviewPreview{width:100%;height:52vh;border:1px solid var(--line)}#extReviewRaw{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
 #extReviewLines input{min-width:85px;min-height:42px;padding:6px}#extReviewLines input[data-key="name"]{min-width:150px}
+#extReviewHead th{white-space:nowrap}
+#extReviewLines select[data-key="rate"]{min-width:66px}
+#extReviewLines select[data-key="category"]{min-width:82px}
 #extReceiptDialog .ext-missing{border:2px solid #c33442;background:#fff0f1}
 #extBatchRows input[type="checkbox"],#extReviewLines input[type="checkbox"]{width:24px;min-width:24px;min-height:24px}
 #extReviewLines input[type="checkbox"][hidden],#extLines input[type="checkbox"][hidden]{display:none}
@@ -21,7 +24,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 #extCameraDialog::backdrop{background:#0009}
 #extCameraDialog [hidden]{display:none}
 #extReviewGuests[hidden]{display:none}
-#extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(6),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(6){display:none}
+#extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(7),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(7){display:none}
 #extLines.ext-no-unit .ext-unit-field{display:none}
 #extInvoiceOcrNotice[hidden]{display:none}
 </style>
@@ -53,8 +56,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <p class="hint" id="extInvoiceOcrNotice">伝票の写真・PDFをGoogle Gemini APIに送信します。無料枠では送信データがサービス改善に使われる場合があります。</p>
  <div id="extInvoiceCapture">
   <p class="hint" id="extCaptureGuide">伝票を1枚ずつ平らに置き、明るい場所で真上から撮ってください。文字の上を画面の上にして、四隅と合計欄が入る範囲で大きく写します。影や反射を避け、数量や単価の小さな数字までくっきり見えるか確認してください。</p>
-  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">ガイド付きカメラ</button>
-  <button id="extOpenNativeCamera" type="button" aria-describedby="extCaptureGuide">標準カメラで撮る</button>
+  <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">伝票読取</button>
   <input id="extCamera" type="file" accept="image/*" capture="environment" hidden>
   <p id="extCaptureStatus" class="hint" role="status"></p>
  </div>
@@ -69,7 +71,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 <dialog id="extCameraDialog" aria-label="伝票の撮影">
  <p id="extCameraMessage" role="status"></p>
  <div class="ext-actions">
-  <button id="extNativeCamera" type="button">標準カメラで撮る</button>
+  <button id="extNativeCamera" type="button" hidden>標準カメラで撮る</button>
   <button id="extCloseCamera" type="button">閉じる</button>
  </div>
 </dialog>

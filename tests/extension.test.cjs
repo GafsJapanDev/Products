@@ -545,6 +545,18 @@ test('Gemini comparison uses only the selected image, preserves partial details 
  assert.deepEqual([paged.supplier,paged.pageNumber,paged.pageCount,paged.printedTotal],['maruyasu',1,2,null]);
 });
 
+test('Nishihara applies 8 percent only for the reduced-rate marker in NO',()=>{
+ const c=harness();
+ const model={supplier_name:'西原商会',document_type:'delivery',tax_mode:'net',items:[
+  {item_name:'だし',reduced_no_mark:true,tax_rate:10},
+  {item_name:'備品 ※',reduced_no_mark:false,tax_rate:10}
+ ]};
+ assert.deepEqual(Array.from(c.extGeminiInvoiceDraft_(model,'').lines,line=>line.rate),[8,10]);
+ assert.deepEqual(Array.from(c.extGeminiInvoiceDraft_({...model,supplier_name:'カクヤス'},'').lines,line=>line.rate),[10,10]);
+ const drive='西原商会\nNO. | 品名 | 数量 | 単位 | 単価 | 金額\n※1 | だし | 1 | 袋 | 500 | 500\n2 | 備品 ※ | 1 | 個 | 800 | 800';
+ assert.deepEqual(Array.from(c.extParseInvoice_(drive,'').lines,line=>line.rate),[8,'']);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};

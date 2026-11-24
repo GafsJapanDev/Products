@@ -327,7 +327,7 @@ function extRenderReceiptQueue(){
  });
  $('extSaveBatch').hidden=kind!=='invoice';$('extMergeReceipts').hidden=kind!=='invoice';
  $('extReadOcr').disabled=extReceiptReading;$('extUpload').disabled=extReceiptReading;
- $('extOpenCamera').disabled=extReceiptReading;$('extOpenNativeCamera').disabled=extReceiptReading;
+ $('extOpenCamera').disabled=extReceiptReading;
  $('extRetryReceipts').disabled=extReceiptReading;
  $('extBatchNotice').textContent=kind==='invoice'?'確認済みの伝票だけを各納品日に保存します。確認途中・失敗した伝票は一覧に残ります。':'ジャーナルは1件ずつ確認し、売上入力欄へ反映してから保存します。';
 }
@@ -384,14 +384,37 @@ let extCameraSession=null,extRetakeEntry=null;
 function extStopCameraPage(){
  const session=extCameraSession;
  extCameraSession=null;
- if(session&&!session.popup.closed)session.popup.close();
+ if(session){
+  clearTimeout(session.readyTimer);
+  if(!session.popup.closed)session.popup.close();
+ }
 }
 function extCloseCamera(){
  extRetakeEntry=null;
  extStopCameraPage();
  $('extCameraDialog').close();
 }
-$('extOpenNativeCamera').onclick=()=>{if(!extReceiptReading){extRetakeEntry=null;$('extCamera').click();}};
+function extOpenNativeCamera(){
+ const camera=$('extCamera');
+ try{
+  if(typeof camera.showPicker==='function')camera.showPicker();
+  else{
+   if(window.navigator?.userActivation?.isActive===false)return false;
+   camera.click();
+  }
+  return true;
+ }catch(_){return false;}
+}
+function extFallbackCamera(){
+ extStopCameraPage();
+ $('extCameraMessage').textContent='ガイド付き撮影を利用できないため、標準カメラを開きます。';
+ $('extNativeCamera').hidden=true;
+ if(!$('extCameraDialog').open)$('extCameraDialog').showModal();
+ if(!extOpenNativeCamera()){
+  $('extCameraMessage').textContent='ガイド付き撮影を利用できません。標準カメラを開いてください。';
+  $('extNativeCamera').hidden=false;
+ }
+}
 $('extOpenCamera').onclick=()=>{
  const dialog=$('extCameraDialog');
  if(extReceiptReading||busy||dialog.open)return;
@@ -399,15 +422,19 @@ $('extOpenCamera').onclick=()=>{
  const token=crypto.randomUUID();
  url.hash=new URLSearchParams({token,origin:window.location.origin}).toString();
  const popup=window.open(url.href,'_blank');
- if(popup)extCameraSession={token,origin:url.origin,popup};
- $('extCameraMessage').textContent=popup
-  ?'撮影ページを開きました。「この写真を使う」を押すと、写真がここに戻ります。'
-  :'撮影ページを開けませんでした。ポップアップを許可するか、標準カメラで撮ってください。';
+ if(!popup){extFallbackCamera();return;}
+ extCameraSession={token,origin:url.origin,popup,readyTimer:setTimeout(()=>{
+  if(extCameraSession?.token===token)extFallbackCamera();
+ },10000)};
+ $('extNativeCamera').hidden=true;
+ $('extCameraMessage').textContent='撮影ページを開きました。「この写真を使う」を押すと、写真がここに戻ります。';
  dialog.showModal();
 };
 window.addEventListener('message',event=>{
  const session=extCameraSession,data=event.data;
  if(!session||event.origin!==session.origin||event.source!==session.popup||data?.token!==session.token)return;
+ if(data.type==='receipt-camera-ready'){clearTimeout(session.readyTimer);return;}
+ if(data.type==='receipt-camera-unavailable'){extFallbackCamera();return;}
  if(data.type==='receipt-camera-cancel'){extCloseCamera();return;}
  if(data.type!=='receipt-camera-photo')return;
  const blob=data.blob;
@@ -416,24 +443,25 @@ window.addEventListener('message',event=>{
   extAcceptCameraPhoto(new File([blob],'伝票-'+Date.now()+'.jpg',{type:blob.type}));
  session.popup.postMessage({type:'receipt-camera-result',token:session.token,ok},session.origin);
  if(ok){
+  clearTimeout(session.readyTimer);
   extCameraSession=null;
   extRetakeEntry=null;
   $('extCameraDialog').close();
  }else{
-  $('extCameraMessage').textContent='写真を追加できませんでした。'+($('extCaptureStatus').textContent||'標準カメラでも撮影できます。');
+  $('extCameraMessage').textContent='写真を追加できませんでした。'+($('extCaptureStatus').textContent||'写真を確認してやり直してください。');
  }
 });
-$('extNativeCamera').onclick=()=>{extStopCameraPage();$('extCameraDialog').close();$('extCamera').click();};
+$('extNativeCamera').onclick=()=>extOpenNativeCamera();
 $('extCloseCamera').onclick=extCloseCamera;
 $('extCameraDialog').addEventListener('cancel',event=>{event.preventDefault();extCloseCamera();});
 window.addEventListener('pagehide',extStopCameraPage);
 $('extCamera').onchange=()=>{
  const camera=$('extCamera'),file=camera.files[0];
  if(file&&!extAcceptCameraPhoto(file)&&extRetakeEntry)$('extReviewError').textContent='JPEGまたはPNGの写真を選んでください。';
- extRetakeEntry=null;
+ extCloseCamera();
  camera.value='';
 };
-$('extCamera').addEventListener('cancel',()=>{extRetakeEntry=null;});
+$('extCamera').addEventListener('cancel',extCloseCamera);
 function extAcceptCameraPhoto(file){
  if(!extRetakeEntry)return extAppendCameraPhoto(file);
  if(!['image/jpeg','image/png'].includes(file.type)){
@@ -594,10 +622,10 @@ function extReviewAddRow(value={}){
   const {category,material,rate}=extLineClassification(value,extVal('extReviewSupplier'));
   category.extSyncLineType(extVal('extReviewType'));
   const appendCell=field=>{const cell=document.createElement('td');cell.append(field);tr.append(cell);};
-  appendCell(category);
   appendCell(material);
-  for(const [key,type] of [['name','text'],['sku','text'],['qty','number'],['unit','text'],['price','number'],['amount','number']])extReviewCell(tr,key,value[key],type);
   appendCell(rate);
+  appendCell(category);
+  for(const [key,type] of [['name','text'],['sku','text'],['qty','number'],['unit','text'],['price','number'],['amount','number']])extReviewCell(tr,key,value[key],type);
   extReviewCell(tr,'reason',value.reason);
  }
  const td=document.createElement('td'),remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','この明細を削除');
@@ -669,7 +697,7 @@ function extOpenReceiptReview(id){
   extReviewAdjustment:d.adjustment||0,extReviewReason:d.reason||''}))extReviewInput(key,value,'text',['extReviewDate','extReviewSupplier','extReviewTotal'].includes(key));
  extSyncReviewUnits();
  $('extReviewHead').replaceChildren();const head=document.createElement('tr');
- (journal?['決済方法','金額','削除']:['区分','資材','品名','商品コード','数量','単位','単価','金額','税率','差額理由','削除']).forEach(label=>extReceiptText(head,label,'th'));$('extReviewHead').append(head);
+ (journal?['決済方法','金額','削除']:['資材','税率','区分','品名','商品コード','数量','単位','単価','金額','差額理由','削除']).forEach(label=>extReceiptText(head,label,'th'));$('extReviewHead').append(head);
  $('extReviewLines').replaceChildren();(journal?d.payments||[]:d.lines||[]).forEach(extReviewAddRow);
  $('extReviewWarning').textContent=(d.warnings||[]).join('\n');$('extReviewRaw').textContent=entry.texts.join('\n\n');
  $('extReviewError').textContent='';$('extReviewConfirm').textContent=entry.status==='saved'?'保存済み':journal?'売上の入力欄に反映':'この伝票を確認済みにする';

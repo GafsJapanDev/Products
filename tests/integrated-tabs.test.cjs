@@ -15,7 +15,7 @@ const sections=['売上','仕入','小口','入金','棚卸','AI'].map(id=>el(id
 const calls=[];
 const context={suppliers:['キタニ水産'],products:[],invoices:[],legacy:[],taxes:[]};
 const listeners={};
-const sandbox={window:{location:{origin:'https://example-script.googleusercontent.com'},addEventListener(name,fn){listeners[name]=fn;}},console,crypto,structuredClone,URL,URLSearchParams,Blob,File,$:el,document:{getElementById:el,createElement:t=>new Element(t),
+const sandbox={window:{location:{origin:'https://example-script.googleusercontent.com'},addEventListener(name,fn){listeners[name]=fn;}},console,crypto,structuredClone,URL,URLSearchParams,Blob,File,setTimeout,clearTimeout,$:el,document:{getElementById:el,createElement:t=>new Element(t),
  querySelector:s=>s==='nav'?nav:actions,
  querySelectorAll:s=>s==='section'?sections:s==='nav button'?nav.children:[]},
  render(){sections.forEach(e=>e.hidden=e!==el(sandbox.tab));},capture(){},current(){return {date:sandbox.activeDate};},
@@ -43,8 +43,8 @@ async function main(){
  run("extReceiptQueue.push({id:'receipt_oct',kind:'invoice',status:'ready',uploads:[{file:{name:'oct.jpg'}}],sources:[{id:'raw_oct',url:'https://drive.google.com/file/d/oct/view'}],texts:['原文'],draft:{kind:'invoice',date:'2026-10-31',supplier:'キタニ水産',printedTotal:100,type:'delivery',taxMode:'gross',tax:null,lines:[],warnings:[]}});");
  run("extOpenReceiptReview('receipt_oct')");
  assert.equal(el('extReceiptDialog').open,true);assert.equal(el('extReviewDate').value,'2026-10-31');
- assert.equal(el('extReviewHead').children[0].children[0].textContent,'区分');
- assert.equal(el('extReviewHead').children[0].children[1].textContent,'資材');
+ assert.equal(el('extReviewHead').children[0].children[0].textContent,'資材');
+ assert.equal(el('extReviewHead').children[0].children[1].textContent,'税率');
  const classification=sandbox.extLineClassification({rate:8},'カクヤス');
  const classRow=new Element('tr');
  classRow.append(classification.category,classification.material,classification.rate);
@@ -193,6 +193,18 @@ async function main(){
  assert.equal(replies[0][0].ok,true);
  assert.equal(replies[0][1],cameraUrl.origin);
  assert.equal(el('extCameraDialog').open,false);
+ let nativeAttempts=0;
+ el('extCamera').showPicker=()=>{nativeAttempts++;};
+ sandbox.window.open=()=>null;
+ el('extOpenCamera').onclick();
+ assert.equal(nativeAttempts,1);
+ assert.equal(el('extNativeCamera').hidden,true);
+ assert.match(el('extCameraMessage').textContent,/標準カメラを開きます/);
+ el('extCloseCamera').onclick();
+ el('extCamera').showPicker=()=>{throw Error('requires activation');};
+ el('extOpenCamera').onclick();
+ assert.equal(el('extNativeCamera').hidden,false);
+ el('extCloseCamera').onclick();
  sandbox.extAcceptCameraPhoto=savedAccept;
 
  // Journal confirmation writes to the existing form and retains the source link.
