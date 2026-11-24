@@ -33,6 +33,17 @@ function invoiceInput(ctx,overrides={}){
 }
 let passed=0;
 function test(name,fn){fn();passed++;console.log('OK '+name);}
+test('materials retain their original purchase class and tax rate when saved as expenses',()=>{
+ const c=harness();
+ const input=invoiceInput(c,{supplier:'カクヤス',lines:[
+  {name:'資材',qty:1,price:200,amount:200,category:'雑費',rate:10,baseCategory:'飲料',baseRate:'8'}
+ ]});
+ const {invoice}=c.saveExtensionInvoice(input);
+ assert.deepEqual([invoice.lines[0].category,invoice.lines[0].rate,invoice.lines[0].baseCategory,invoice.lines[0].baseRate],
+  ['雑費',10,'飲料','8']);
+ assert.equal(c.extInvoiceBuckets_(invoice).雑費,200);
+});
+
 test('supplier-specific products, invoice totals and detail comparison use different data',()=>{
  const c=harness(),a=invoiceInput(c,{printedTotal:300,reason:'送料100',adjustment:100});
  c.saveExtensionInvoice(a);c.saveExtensionInvoice(invoiceInput(c,{supplier:'西原',printedTotal:200}));
@@ -139,9 +150,9 @@ test('browser invoice OCR uses the stored image and rejects ambiguous numeric va
  const c=harness();
  const input={fileId:'browser-image',supplier:'西原',text:'納品日 2026/11/22\n伝票番号 0071\n合計 1,800円',
   rowText:'商品名 数量 単価 金額\n豚 肩ロース｜１.５kg｜￥１,２００｜１,８００円\n豆腐 2 個 1O0 200\n合計 1,800円'};
- assert.throws(()=>c.parseExtensionBrowserInvoice(input),/先に写真/);
+ assert.throws(()=>c.parseExtensionBrowserInvoice_(input),/先に写真/);
  c.extWrite_('file','browser-image',0,{opId:'browser-image-op'},{id:'browser-image',mime:'image/png',name:'fixture.png'});
- const result=c.parseExtensionBrowserInvoice(input);
+ const result=c.parseExtensionBrowserInvoice_(input);
  assert.equal(result.source.id,'browser-image');
  assert.equal(result.draft.date,'2026-11-22');
  assert.equal(result.draft.invoiceNumber,'0071');
@@ -193,7 +204,7 @@ test('Kakuyasu crop separates item counts from case size and reads only labeled 
 test('Kakuyasu reread accepts an observed quantity only when it matches the row amount',()=>{
  const c=harness();
  c.extWrite_('file','crop-test',0,{opId:'crop-test-op'},{id:'crop-test',mime:'image/png',name:'test.png'});
- const read=qty=>c.parseExtensionBrowserInvoice({fileId:'crop-test',supplier:'カクヤス',text:'カクヤス',rowText:'カクヤス',
+ const read=qty=>c.parseExtensionBrowserInvoice_({fileId:'crop-test',supplier:'カクヤス',text:'カクヤス',rowText:'カクヤス',
   crops:{items:'中瓶',totals:'',cells:[{name:'テストビール 中瓶',qty,price:'286',amount:'858'}]}});
  assert.equal(read('3').draft.lines[0].qty,3);
  assert.equal(read('20').draft.lines[0].qty,null);
@@ -390,6 +401,150 @@ test('Preco split OCR reconciles the item, net subtotal, tax, and gross total',(
  assert.equal(parse(text.replace('【8%対象)\n142','【8%対象)\n145')).lines.length,0);
 });
 
+test('Preco column-block OCR reconciles four details even with a missing quantity',()=>{
+ const c=harness();
+ const text=require('node:fs').readFileSync('tests/fixtures/preco-column-ocr.txt','utf8').trimEnd();
+ const draft=c.extParseInvoice_(text,'');
+ assert.deepEqual([draft.invoiceNumber,draft.printedTotal,draft.tax],['02154640',12869,1029]);
+ assert.deepEqual(Array.from(draft.lines,item=>[item.qty,item.amount]),[[0.65,3614],[1.08,2160],[1.9,5605],[null,1490]]);
+ assert.deepEqual(Array.from(draft.lines,item=>item.sku),['001060','100205','309505','12437']);
+ assert.match(draft.warnings.join(' '),/13,838/);
+ assert.equal(c.saveExtensionInvoice(invoiceInput(c,draft)).invoice.total,13898);
+ const mismatch=c.extParseInvoice_(text.replace('5,605','5,604'),'');
+ assert.equal(mismatch.lines.length,0);
+ assert.equal(mismatch.printedTotal,12869);
+ const uncorroborated=c.extParseInvoice_(text.replace('12, 869','12, 879'),'');
+ assert.equal(uncorroborated.printedTotal,null);
+ assert.equal(uncorroborated.lines.length,0);
+});
+
+test('Preco retake OCR rejoins the detached amount column and split quantity',()=>{
+ const c=harness();
+ const text=require('node:fs').readFileSync('tests/fixtures/preco-retake-ocr.txt','utf8');
+ const draft=c.extParseInvoice_(text,'');
+ assert.deepEqual([draft.printedTotal,draft.tax],[12869,1029]);
+ assert.deepEqual(Array.from(draft.lines,item=>[item.name.match(/メバチマグロ|真鯛半身|富士山サーモン半身|ぶり切身/)?.[0],
+  item.sku,item.qty,item.unit,item.price,item.amount]),[
+  ['メバチマグロ','',0.65,'kg',5560,3614],['真鯛半身','100205',1.08,'kg',2000,2160],
+  ['富士山サーモン半身','309505',1.9,'kg',2950,5605],['ぶり切身','12437',1,'pc',1490,1490]
+ ]);
+ assert.match(draft.warnings.join(' '),/13,838/);
+ assert.equal(c.saveExtensionInvoice(invoiceInput(c,draft)).invoice.total,13898);
+ const wrongAmounts=text.replace('3,614','2,160').replace('2, 160','3,614');
+ assert.equal(c.extParseInvoice_(wrongAmounts,'').lines.length,0);
+});
+
+test('Preco separate columns reconcile merged amounts and displaced subtotal labels',()=>{
+ const c=harness();
+ const text=require('node:fs').readFileSync('tests/fixtures/preco-separate-columns-ocr.txt','utf8');
+ for(const rowText of [undefined,'品名 数量 単価 金額']){
+  const draft=c.extParseInvoice_(text,'',rowText);
+  assert.deepEqual([draft.invoiceNumber,draft.printedTotal,draft.tax],['00214634',7671,613]);
+  assert.deepEqual(Array.from(draft.lines,item=>[item.sku,item.qty,item.unit,item.price,item.amount,item.rate]),
+   [['100205',1,'kg',2000,2000,8],['001060',1.02,'kg',5560,5671,8]]);
+ }
+ assert.equal(c.saveExtensionInvoice(invoiceInput(c,c.extParseInvoice_(text,''))).invoice.total,8284);
+ const wrongOrder=text.replace('2 000 5,671','5,671 2 000');
+ assert.equal(c.extParseInvoice_(wrongOrder,'').lines.length,0);
+});
+
+test('Paddle Preco keeps independently printed values and reconciles detached footer totals',()=>{
+ const c=harness();
+ const parse=text=>{const {net,tax,gross}=c.extPaddlePrecoTotals_(text);return [net,tax,gross];};
+ assert.deepEqual(parse('納 品 額\n12.869\n消 費 税 1, 029'),[12869,1029,null]);
+ assert.deepEqual(parse('7,671 613 8 284\n納品額 値引 消費税 合計金額'),[7671,613,8284]);
+ assert.deepEqual(parse('7,671 613 8 285\n納品額 値引 消費税 合計金額'),[null,null,null]);
+ assert.deepEqual(parse('真鯛 1 kg 2,000 2,000'),[null,null,null]);
+ assert.deepEqual(parse('納品額 100\n納品額 200'),[null,null,null]);
+});
+
+test('Paddle Preco keeps the fourth detail when its printed quantity drops out',()=>{
+ const c=harness();
+ c.extWrite_('file','paddle-preco',0,{opId:'paddle-preco-op'},{id:'paddle-preco',mime:'image/jpeg'});
+ const text=[
+  '2026年10月30日 【納品書】 ル-ト:60-11-255',
+  'コ-ド:010993-010994 伝票NO.012154640','PRECO FAX 03',
+  'コード 品 名 数量 单価 金額',
+  '001060 【徳用】メバチマグロ(皮無/赤身/冷凍)·柵 * 0.65 kg 5,560 3,614',
+  '100205 真鲷半身(国産/養殖/生) * 1.08 kg 2,000 2,160',
+  '309505 富士山サーモン半身（静岡県産/養殖/生) * 1.9 kg 2,950 5,605',
+  '12437 ぶり切身(骨無/外国産/冷凍）·70g×10枚 pC 1,490 1,490',
+  '12.869 1,029 13,898','納品額 值引 消費税 合計金額',
+  '(8%対象) 12,869 (8%対象) 8%对象） 1.029 8%对象） 13.8.18',
+  '*印は軽减税率文象商品'
+ ].join('\n');
+ const {draft}=c.parseExtensionBrowserInvoice_({fileId:'paddle-preco',engine:'paddle',text,rowText:text});
+ assert.equal(draft.lines.length,4);
+ const line=draft.lines[3];
+ assert.deepEqual([line.sku,line.qty,line.unit,line.price,line.amount],['12437',null,'pc',1490,1490]);
+ assert.deepEqual([draft.printedTotal,draft.tax],[12869,1029]);
+ assert.match(draft.warnings.join(' '),/数量を読み取れない/);
+ assert.equal(c.saveExtensionInvoice(invoiceInput(c,draft)).invoice.total,13898);
+});
+
+test('Gemini comparison uses only the selected image, preserves partial details and verifies printed taxes',()=>{
+ const c=harness();
+ c.extWrite_('file','gemini-preco',0,{opId:'gemini-file-op'},
+  {id:'gemini-preco',mime:'image/jpeg',driveId:'source-drive'});
+ const request={fileId:'gemini-preco',kind:'invoice'};
+ assert.throws(()=>c.readExtensionOcr(request),/GEMINI_API_KEY/);
+ assert.equal(c.fetchCount(),0);
+ c.testProps.GEMINI_API_KEY='test-key';
+ const getFile=c.DriveApp.getFileById;
+ c.DriveApp.getFileById=id=>{
+  const file=getFile(id);
+  return id==='source-drive'?{...file,getBlob:()=>({getBytes:()=>[1,2,3]})}:file;
+ };
+ let fallbackReads=0;
+ c.Drive={Files:{create:()=>{fallbackReads++;return {id:'temporary'};},update:()=>{}}};
+ c.DocumentApp={openById:()=>({getBody:()=>({getText:()=> '株式会社 プレコフーズ 2026年10月30日'})})};
+ c.Utilities.base64Encode=bytes=>Buffer.from(bytes).toString('base64');
+ let statuses=[503,200],requests=0,sleeps=0;
+ c.Utilities.sleep=()=>{sleeps++;};
+ const modelResult={supplier_name:'株式会社プレコフーズ',delivery_date:'2026-10-30',invoice_number:'02154640',
+  document_type:'delivery',tax_mode:'net',subtotal:12869,tax:1029,total_amount:13898,adjustment:null,page_number:null,page_count:null,
+  items:[{item_name:'ぶり切身',sku:'001060',quantity:null,unit:'pc',unit_price:1490,amount:1490,tax_rate:8}]};
+ c.UrlFetchApp.fetch=(url,options)=>{
+  assert.match(url,/models\/gemini-3\.5-flash-lite:generateContent$/);
+  assert.equal(url.includes('test-key'),false);
+  assert.equal(options.headers['x-goog-api-key'],'test-key');
+  const body=JSON.parse(options.payload);
+  assert.equal(body.contents[0].parts[1].inlineData.data,'AQID');
+  assert.equal(body.generationConfig.responseMimeType,'application/json');
+  assert.equal(body.generationConfig.responseJsonSchema.properties.items.items.properties.quantity.type[1],'null');
+  requests++;
+  const status=statuses.shift();
+  return {getResponseCode:()=>status,getContentText:()=>JSON.stringify({candidates:[{finishReason:'STOP',
+   content:{parts:[{text:JSON.stringify(modelResult)}]}}]})};
+ };
+ const {draft,engine}=c.readExtensionOcr(request);
+ assert.equal(engine,'gemini');
+ assert.deepEqual([draft.supplier,draft.invoiceNumber,draft.printedTotal,draft.tax],['プレコフーズ','02154640',12869,1029]);
+ assert.deepEqual([draft.lines[0].sku,draft.lines[0].qty,draft.lines[0].amount],['001060',null,1490]);
+ assert.match(draft.warnings.join(' '),/印字合計が一致しません/);
+ assert.deepEqual([requests,sleeps],[2,1]);
+ statuses=[429];
+ assert.equal(c.readExtensionOcr(request).draft.supplier,'プレコフーズ');
+ assert.deepEqual([requests,sleeps],[3,1]);
+ statuses=[503,503];
+ assert.equal(c.readExtensionOcr(request).draft.supplier,'プレコフーズ');
+ assert.deepEqual([requests,sleeps,fallbackReads],[5,2,2]);
+ c.extWrite_('file','gemini-pdf',0,{opId:'gemini-pdf-op'},
+  {id:'gemini-pdf',mime:'application/pdf',driveId:'source-drive'});
+ statuses=[200];
+ modelResult.page_number=1;modelResult.page_count=2;
+ const pdf=c.readExtensionOcr({fileId:'gemini-pdf',kind:'invoice'});
+ assert.equal(pdf.engine,'gemini');
+ assert.equal(pdf.draft.pageCount,null);
+ assert.equal(pdf.draft.printedTotal,12869);
+ const returned=c.extGeminiInvoiceDraft_({...modelResult,supplier_name:'株式会社 カクヤス',document_type:'return',
+  subtotal:20,items:[{item_name:'ビール空容器中',quantity:4,unit:'バラ',unit_price:null,amount:20}]},'');
+ assert.deepEqual([returned.type,returned.taxMode,returned.tax,returned.printedTotal,returned.lines[0].category],
+  ['return','monthly',null,20,'容器']);
+ const paged=c.extGeminiInvoiceDraft_({...modelResult,supplier_name:'丸安商店',page_number:1,page_count:2,subtotal:null,tax_mode:'monthly'},'');
+ assert.deepEqual([paged.supplier,paged.pageNumber,paged.pageCount,paged.printedTotal],['maruyasu',1,2,null]);
+});
+
 test('OCR temporary documents are trashed on both success and text-read failure',()=>{
  const c=harness();c.extWrite_('file','file-test',0,{opId:'file-op'},{id:'file-test',driveId:'drive-file',url:'https://drive.google.com/file/d/drive-file/view'});
  let trashed=0;c.Drive={Files:{create:()=>({id:'temporary'}),update:(metadata,id)=>{assert.equal(metadata.trashed,true);assert.equal(id,'temporary');trashed++;}}};
@@ -414,7 +569,7 @@ test('batch saves isolate failure and reuse stable operation IDs across months',
  const values=Object.values(c.extState_().invoice);assert.equal(values.length,2);
  assert.equal(values.find(i=>i.id===oct.id).date,'2026-10-31');assert.equal(values.find(i=>i.id===nov.id).date,'2026-11-02');
 });
-test('OCR text cache skips Drive conversion and reinterprets results per kind',()=>{
+test('journal OCR text cache skips repeat Drive conversion',()=>{
  const c=harness(),cache=new Map();
  c.extWrite_('file','cached-file',0,{opId:'cache-file-op'},{id:'cached-file',hash:'content-hash',driveId:'drive-file',url:'https://drive.google.com/file/d/x/view'});
  const folder={getId:()=> 'root',getFilesByName:name=>({hasNext:()=>cache.has(name),next:()=>({getBlob:()=>({getDataAsString:()=>cache.get(name)})})}),createFile:(name,text)=>cache.set(name,text)};
@@ -423,7 +578,7 @@ test('OCR text cache skips Drive conversion and reinterprets results per kind',(
  c.Drive={Files:{create:()=>{conversions++;return {id:'temp'};},update:()=>trashed++}};
  c.DocumentApp={openById:()=>({getBody:()=>({getText:()=> '総売上 0円'})})};
  assert.equal(c.readExtensionOcr({fileId:'cached-file',kind:'journal'}).timings.cached,false);
- assert.equal(c.readExtensionOcr({fileId:'cached-file',kind:'invoice',supplier:'西原'}).timings.cached,true);
+ assert.equal(c.readExtensionOcr({fileId:'cached-file',kind:'journal'}).timings.cached,true);
  assert.equal(conversions,1);assert.equal(trashed,1);
  c.readExtensionOcr({fileId:'cached-file',kind:'journal',force:true});assert.equal(conversions,2);assert.equal(trashed,2);
 });

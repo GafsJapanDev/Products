@@ -14,7 +14,8 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 #extReviewPreview{width:100%;height:52vh;border:1px solid var(--line)}#extReviewRaw{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
 #extReviewLines input{min-width:85px;min-height:42px;padding:6px}#extReviewLines input[data-key="name"]{min-width:150px}
 #extReceiptDialog .ext-missing{border:2px solid #c33442;background:#fff0f1}
-#extBatchRows input[type="checkbox"]{width:24px;min-height:24px}
+#extBatchRows input[type="checkbox"],#extReviewLines input[type="checkbox"]{width:24px;min-width:24px;min-height:24px}
+#extReviewLines input[type="checkbox"][hidden],#extLines input[type="checkbox"][hidden]{display:none}
 @media(max-width:900px){.ext-review-layout{grid-template-columns:minmax(0,1fr)}#extReviewPreview{height:30vh}}
 #extCameraDialog{width:min(92vw,42rem);max-height:92dvh;border:0;border-radius:12px;padding:1rem}
 #extCameraDialog::backdrop{background:#0009}
@@ -24,9 +25,9 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 .ext-camera-guide span{background:#101410df;color:white;padding:.4rem;text-align:center}
 #extCameraDialog [hidden]{display:none}
 #extReviewGuests[hidden]{display:none}
-#extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(4),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(4){display:none}
+#extReceiptDialog.ext-no-unit #extReviewHead th:nth-child(6),#extReceiptDialog.ext-no-unit #extReviewLines td:nth-child(6){display:none}
 #extLines.ext-no-unit .ext-unit-field{display:none}
-#extOcrRotationLabel[hidden]{display:none}
+#extInvoiceOcrNotice[hidden]{display:none}
 </style>
 <div class="ext-badge">拡張テスト版 ／ LINE送信停止中</div>
 <div id="extInvoicePanel" hidden>
@@ -53,24 +54,9 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
  <button id="extCloseOcr" type="button">読み取りを閉じる</button>
  <h3 id="extOcrHeading">帳票の読み取り</h3><input id="extOcrKind" type="hidden" value="invoice">
  <label id="extOcrSupplierLabel">仕入先（不明なら空欄・伝票ごとに修正できます）<input id="extOcrSupplier" list="extSuppliers"></label>
- <label id="extInvoiceOcrEngineLabel">写真の読み取り方法
-  <select id="extInvoiceOcrEngine">
-   <option value="drive" selected>Google Drive OCR</option>
-   <option value="browser">Tesseract.js（比較テスト用）</option>
-  </select>
-  <small>PDFはGoogle Drive OCRを使用します。</small>
- </label>
- <label id="extOcrRotationLabel">写真の向き（Tesseract.jsのみ）
-  <select id="extOcrRotation">
-   <option value="auto">自動（写真ごとに判定）</option>
-   <option value="0">そのまま</option>
-   <option value="-90">左に90°回転</option>
-   <option value="90">右に90°回転</option>
-   <option value="180">180°回転</option>
-  </select>
- </label>
+ <p class="hint" id="extInvoiceOcrNotice">伝票の写真・PDFをGoogle Gemini APIに送信します。無料枠では送信データがサービス改善に使われる場合があります。</p>
  <div id="extInvoiceCapture">
-  <p class="hint" id="extCaptureGuide">撮影するときは、伝票の文字の上を画面の上にし、紙の四隅と合計欄が入るように真上から撮ってください。横長の伝票はスマホを横にし、影や反射を避けてください。</p>
+  <p class="hint" id="extCaptureGuide">伝票を1枚ずつ平らに置き、明るい場所で真上から撮ってください。文字の上を画面の上にして、四隅と合計欄が入る範囲で大きく写します。影や反射を避け、数量や単価の小さな数字までくっきり見えるか確認してください。</p>
   <button id="extOpenCamera" type="button" aria-describedby="extCaptureGuide">ガイド付きカメラ</button>
   <button id="extOpenNativeCamera" type="button" aria-describedby="extCaptureGuide">標準カメラで撮る</button>
   <input id="extCamera" type="file" accept="image/*" capture="environment" hidden>
@@ -90,6 +76,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
   <canvas id="extCameraPhoto" aria-label="撮影した伝票" hidden></canvas>
   <div id="extCameraOverlay" class="ext-camera-guide"><span>文字の上を画面の上に。紙の四隅を枠の内側に。</span></div>
  </div>
+ <p class="hint">伝票を1枚だけ写し、影や反射を避けて、数量・単価の小さな数字にピントを合わせてください。</p>
  <p id="extCameraMessage" role="status"></p>
  <div class="ext-actions">
   <button id="extTakePhoto" type="button" disabled>撮影</button>
@@ -102,7 +89,7 @@ nav{overflow-x:auto;justify-content:flex-start}nav button{flex:0 0 auto}
 <dialog id="extReceiptDialog" aria-labelledby="extReceiptDialogTitle">
  <div class="ext-dialog-top"><h2 id="extReceiptDialogTitle">読み取り内容を確認</h2><button id="extReceiptClose" type="button">閉じる</button></div>
  <div class="ext-review-layout">
-  <div><label>原本<select id="extReviewSource"></select></label><div id="extReviewLinks"></div><iframe id="extReviewPreview" title="添付した伝票の原本" loading="lazy" referrerpolicy="no-referrer"></iframe></div>
+  <div><label>原本<select id="extReviewSource"></select></label><div id="extReviewLinks"></div><div id="extReviewRetakeActions" hidden><p class="hint">数量や単価が読めないときは、影や反射を避け、四隅と合計欄を入れて真上から撮り直してください。</p><button id="extReviewRetake" type="button">写真を撮りなおす</button></div><iframe id="extReviewPreview" title="添付した伝票の原本" loading="lazy" referrerpolicy="no-referrer"></iframe></div>
   <div>
    <div class="ext-grid"><label>日付<input id="extReviewDate" type="date"></label><label id="extReviewSupplierLabel">仕入先<input id="extReviewSupplier" list="extSuppliers"></label></div>
    <div id="extReviewInvoiceFields">

@@ -47,7 +47,9 @@ function saveExtensionInvoice(input) {return locked_(()=>{
   const rate=x.rate===''||x.rate==null?null:Number(x.rate);
   if(rate!==null&&![0,8,10].includes(rate))throw Error('税率を確認してください');
   if(qty!==null&&price!==null&&Math.abs(qty*price-amount)>1&&!extText_(x.reason))throw Error('数量×単価と明細金額が違います。行の理由を入力してください');
-  return {productId:extId_('p_',supplier.id+'|'+(sku?'sku:'+sku:'name:'+extNormalize_(name))),sku,name,qty,unit,price,amount,category:credit?'雑費':category,rate,reason:extText_(x.reason)};
+  return {productId:extId_('p_',supplier.id+'|'+(sku?'sku:'+sku:'name:'+extNormalize_(name))),sku,name,qty,unit,price,amount,category:credit?'雑費':category,rate,...(category==='雑費'&&!credit&&['食材','飲料'].includes(x.baseCategory)?{
+   baseCategory:x.baseCategory,baseRate:['','0','8','10'].includes(String(x.baseRate??''))?String(x.baseRate??''):''
+  }:{}),reason:extText_(x.reason)};
  });
  if(lines.length>100)throw Error('明細は100行以内です');
  const printedTotal=extNumber_(input.printedTotal,true),tax=extNumber_(input.tax,false),adjustment=Number(input.adjustment||0);

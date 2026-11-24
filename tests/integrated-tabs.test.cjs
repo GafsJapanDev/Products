@@ -42,7 +42,24 @@ async function main(){
  run("extReceiptQueue.push({id:'receipt_oct',kind:'invoice',status:'ready',uploads:[{file:{name:'oct.jpg'}}],sources:[{id:'raw_oct',url:'https://drive.google.com/file/d/oct/view'}],texts:['原文'],draft:{kind:'invoice',date:'2026-10-31',supplier:'キタニ水産',printedTotal:100,type:'delivery',taxMode:'gross',tax:null,lines:[],warnings:[]}});");
  run("extOpenReceiptReview('receipt_oct')");
  assert.equal(el('extReceiptDialog').open,true);assert.equal(el('extReviewDate').value,'2026-10-31');
- assert.equal(el('extReviewHead').children[0].children[0].textContent,'品名');
+ assert.equal(el('extReviewHead').children[0].children[0].textContent,'区分');
+ assert.equal(el('extReviewHead').children[0].children[1].textContent,'資材');
+ const classification=sandbox.extLineClassification({rate:8},'カクヤス');
+ const classRow=new Element('tr');
+ classRow.append(classification.category,classification.material,classification.rate);
+ classification.category.extSyncLineType('delivery');
+ assert.equal(classification.category.value,'飲料');
+ assert.equal(sandbox.extLineClassification({},'丸安商店').category.value,'食材');
+ classification.material.checked=true;
+ classification.material.onchange();
+ assert.equal(classification.rate.value,'10');
+ assert.deepEqual({...sandbox.extReadInvoiceLine(classRow)},{category:'雑費',rate:'10',baseCategory:'飲料',baseRate:'8'});
+ classification.material.checked=false;
+ classification.material.onchange();
+ assert.equal(classification.rate.value,'8');
+ classification.category.extSyncLineType('return');
+ assert.equal(classification.category.value,'容器');
+ assert.equal(classification.material.hidden,true);
  await el('extReviewConfirm').onclick();
  assert.equal(run("extReceiptQueue[0].status"),'confirmed');
  run("extReceiptQueue.push({id:'receipt_nov',kind:'invoice',status:'confirmed',uploads:[{file:{name:'nov.jpg'}}],sources:[{id:'raw_nov'}],texts:[],draft:{kind:'invoice',date:'2026-11-02',supplier:'西原',printedTotal:200,type:'delivery',taxMode:'gross',tax:null,adjustment:0,reason:'',lines:[],warnings:[]}})");
@@ -76,22 +93,6 @@ async function main(){
  assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,firstPage],'duplicate'),/重複なし/);
  lastPage.draft.type='return';
  assert.throws(()=>sandbox.extMergeReceiptModels([firstPage,lastPage],'mixed'),/容器回収票/);
- const word=(text,x,y,width=12)=>({text,bbox:{x0:x,y0:y,x1:x+width,y1:y+12}});
- const dateData={blocks:[{paragraphs:[{lines:[{words:[
-  word('26/10/31',694,304,32),word('26/10/31',800,304,32)
- ]}]}]}]};
- const dateOffset=sandbox.extKakuyasuDateOffset(dateData,1000,1000);
- assert.ok(Math.abs(dateOffset.x-0.04)<0.001&&Math.abs(dateOffset.y-0.03)<0.001);
- assert.equal(sandbox.extKakuyasuDateOffset(dateData,1000,400),null);
- const fields=sandbox.extKakuyasuFields({blocks:[{paragraphs:[{lines:[{words:[
-  word('商品',100,40),word('名',113,40),word('規格',200,40),
-  word('バラ',350,40),word('数',363,40),word('単価',410,40),
-  word('ビール',110,70,40),word('中瓶',152,70,24),word('286',413,70,18),word('858',476,70,18)
- ]}]}]}]});
- assert.equal(fields.length,1);
- assert.equal(fields[0].name,'ビール 中瓶');
- assert.equal(fields[0].amount,'858');
- assert.ok(fields[0].left<355&&fields[0].right>365);
  assert.doesNotThrow(()=>sandbox.extValidateReviewDraft({
   date:'2026-10-31',supplier:'カクヤス',type:'delivery',taxMode:'monthly',printedTotal:858,adjustment:0,
   requiresQuantityReview:true,lines:[{name:'ビール',qty:null,amount:858,unit:'本',price:286}]
@@ -102,24 +103,69 @@ async function main(){
  assert.equal(active,2);releases[1]();for(let i=0;i<10;i++)await Promise.resolve();
  assert.equal(done,1);assert.equal(releases.length,3);assert.equal(active,2);
  releases[0]();releases[2]();await pool;assert.equal(max,2);assert.equal(done,3);
- // A failed browser OCR can retry through Drive using the original already in storage.
+ // A failed read uses the original already in storage on retry, with no OCR mode selector or override.
  const previousRpc=sandbox.rpc;
  const retryCalls=[];
  sandbox.extReadFile=async()=> 'fixture-bytes';
- sandbox.extReadBrowserInvoice=async()=>{throw Error('worker unavailable');};
+ const precoSource={id:'preco-file',name:'preco.pdf',mime:'application/pdf'};
+ const geminiDraft={date:'2026-10-30',supplier:'プレコフーズ',invoiceNumber:'02154640',type:'delivery',
+  taxMode:'net',printedTotal:12869,tax:1029,lines:[
+   {name:'まぐろ',amount:3614},{name:'真鯛',amount:2160},{name:'サーモン',amount:5605},{name:'ぶり切身',qty:1,amount:1490}
+  ],warnings:[]};
+ const recognized={text:'構造化データ',draft:geminiDraft,source:precoSource};
  sandbox.rpc=async(name,arg)=>{
-  retryCalls.push(name);
-  if(name==='archiveExtensionDocument')return {id:arg.id,name:arg.name};
-  if(name==='readExtensionOcr')return {source:{id:arg.fileId},text:'読取結果',draft:{warnings:[]}};
+  if(name==='reportExtensionClientError')return;
+  retryCalls.push([name,arg.kind,arg.engine]);
+  if(name==='processExtensionReceipt')return {ok:false,stage:'OCR',error:'一時エラー',source:precoSource};
+  if(name==='readExtensionOcr')return recognized;
  };
- const retryEntry={id:'retry',kind:'invoice',engine:'browser',uploads:[{id:'fixture',file:{name:'fixture.png',type:'image/png'}}],sources:[]};
- await sandbox.extProcessReceipt(retryEntry);
- assert.equal(retryEntry.status,'failed');
- assert.equal(retryEntry.sources[0].id,'fixture');
- retryEntry.engine='drive';
- await sandbox.extProcessReceipt(retryEntry);
- assert.equal(retryEntry.status,'ready');
- assert.deepEqual(retryCalls.filter(name=>name!=='reportExtensionClientError'),['archiveExtensionDocument','readExtensionOcr']);
+ const precoEntry={id:'preco-retry',kind:'invoice',uploads:[{id:'fixture',file:{name:'fixture.pdf',type:'application/pdf'}}],sources:[]};
+ await sandbox.extProcessReceipt(precoEntry);
+ assert.equal(precoEntry.status,'failed');
+ assert.equal(precoEntry.sources[0].id,precoSource.id);
+ await sandbox.extProcessReceipt(precoEntry);
+ assert.equal(precoEntry.status,'ready');
+ assert.deepEqual(retryCalls,[['processExtensionReceipt','invoice',undefined],['readExtensionOcr','invoice',undefined]]);
+ assert.doesNotMatch(fs.readFileSync('Extension.html','utf8'),/extInvoiceOcrEngine|extOcrRotation/);
+ sandbox.precoEntry=precoEntry;
+ run('extReceiptQueue.push(precoEntry);extOpenReceiptReview(precoEntry.id);');
+ assert.equal(el('extReviewNumber').value,'02154640');
+ assert.equal(String(el('extReviewTotal').value),'12869');
+ assert.equal(String(el('extReviewTax').value),'1029');
+ assert.equal(el('extReviewLines').children.length,4);
+ el('extReceiptClose').onclick();
+ run('extReceiptQueue.pop()');
+
+ const retakeEntry={...sandbox.precoEntry,id:'preco-retake',status:'ready',uploads:[{id:'fixture',file:{name:'preco.jpg',type:'image/jpeg'}}]};
+ sandbox.retakeEntry=retakeEntry;
+ run('extReceiptQueue.push(retakeEntry);extOpenReceiptReview(retakeEntry.id);');
+ assert.equal(el('extReviewRetakeActions').hidden,false);
+ let replacementId;
+ sandbox.rpc=async(name,arg)=>{
+  if(name==='processExtensionReceipt'){
+   replacementId=arg.id;
+   return {ok:false,stage:'OCR',error:'画像を読み取れません'};
+  }
+ };
+ const retakenPhoto={name:'new.jpg',type:'image/jpeg'};
+ await sandbox.extReplaceReceiptPhoto(retakeEntry,retakenPhoto);
+ assert.equal(retakeEntry.sources[0].id,precoSource.id);
+ assert.match(el('extReviewError').textContent,/撮り直した写真を読み取れません/);
+ const failedId=replacementId;
+ sandbox.rpc=async(name,arg)=>{
+  assert.equal(name,'processExtensionReceipt');
+  replacementId=arg.id;
+  return {...recognized,
+   source:{id:replacementId,name:arg.name},ok:true};
+ };
+ await sandbox.extReplaceReceiptPhoto(retakeEntry,retakenPhoto);
+ assert.notEqual(replacementId,failedId);
+ assert.equal(retakeEntry.sources[0].id,replacementId);
+ assert.equal(retakeEntry.id,'preco-retake');
+ assert.equal(el('extReviewLines').children.length,4);
+ assert.equal(el('extReceiptDialog').open,true);
+ el('extReceiptClose').onclick();
+ run('extReceiptQueue.pop()');
 
  sandbox.rpc=previousRpc;
 
