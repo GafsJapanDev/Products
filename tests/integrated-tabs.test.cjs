@@ -33,14 +33,21 @@ async function main(){
  sandbox.tab='仕入';sandbox.render();await Promise.resolve();
  assert.equal(el('extOcrPanel').parentElement,el('extPurchaseOcrHost'));assert.equal(el('extOcrKind').value,'invoice');
  assert.equal(el('extManualPurchase').hidden,true);assert.equal(el('extOcrPanel').hidden,false);
+ assert.equal(el('entryDate').hidden,true);
  run('extEditInvoice(null)');
  el('extManualMode').onclick();
+ assert.equal(el('entryDate').hidden,false);
  assert.equal(el('extManualPurchase').hidden,false);assert.equal(el('extPurchaseOcrHost').hidden,true);
  assert.equal(el('extInvoicePanel').hidden,false);assert.equal(actions.hidden,false);
  assert.equal(el('save').textContent,'仕入先・金額を保存');
  el('extSupplier').value='キタニ水産';el('extTotal').value='5079';
  sandbox.capture();sandbox.tab='売上';sandbox.render();sandbox.tab='仕入';sandbox.render();await Promise.resolve();
  assert.equal(el('extTotal').value,'5079');
+ el('extOpenInvoiceOcr').onclick();
+ assert.equal(el('entryDate').hidden,true);
+ sandbox.tab='売上';sandbox.render();await Promise.resolve();
+ assert.equal(el('entryDate').hidden,false);
+ sandbox.tab='仕入';sandbox.render();await Promise.resolve();
 
  // Different dates remain independent; the modal renders editable table rows.
  run("extReceiptQueue.push({id:'receipt_oct',kind:'invoice',status:'ready',uploads:[{file:{name:'oct.jpg'}}],sources:[{id:'raw_oct',url:'https://drive.google.com/file/d/oct/view'}],texts:['原文'],draft:{kind:'invoice',date:'2026-10-31',supplier:'キタニ水産',printedTotal:100,type:'delivery',taxMode:'gross',tax:null,lines:[],warnings:[]}});");

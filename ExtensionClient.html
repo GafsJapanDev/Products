@@ -16,6 +16,7 @@ capture=function(){if(!extTabs.includes(tab))extOriginalCapture();extCaptureInvo
 current=function(){const r=extOriginalCurrent();if(tab==='売上')r.journalFiles=extJournal[activeDate]||(day.売上?.[0]?.journalFiles||[]);return r;};
 function extSyncPurchaseMode(){
  const manual=extPurchaseMode==='manual';
+ $('entryDate').hidden=tab==='仕入'&&!manual;
  $('extManualPurchase').hidden=!manual;
  $('extPurchaseOcrHost').hidden=manual;
  $('extOpenInvoiceOcr').setAttribute('aria-pressed',String(!manual));
@@ -62,7 +63,7 @@ render=function(){
   $('extInvoiceCapture').hidden=kind==='journal';
   $(tab==='売上'?'extJournalOcrHost':'extPurchaseOcrHost').append($('extOcrPanel'));
  }
- if(tab==='仕入')extSyncPurchaseMode();
+ extSyncPurchaseMode();
  if(tab==='売上'||tab==='仕入')extRenderReceiptQueue();
  if(tab!=='小口'&&tab!=='入金')extLoadContext().catch(e=>showStatus(e.message,'error'));
 };
